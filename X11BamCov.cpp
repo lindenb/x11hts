@@ -75,7 +75,6 @@ public:
 	void paint();
 	void resized();
 
-	static int callback(void *data, bam1_t *b);
 	};
 
 
@@ -88,6 +87,10 @@ public:
 	samFile *fp;
 	bam_hdr_t *hdr;  // the file header
 	hts_idx_t *idx = NULL;
+	bool bad_flag;
+	double max_depth;
+	double y;
+	double height;
 	BamW(X11BamCov* owner,std::string fn);
 	~BamW();
 	};
@@ -134,62 +137,98 @@ for(auto iter:regions) {
 }
 
 void X11BamCov::paint() {
+
+
+GC gc = ::XCreateGC(this->display, this->window, 0, 0);
+for(auto bam: this->bams) {
+   vector<XPoint> points;
+   for(size_t i=0;i< bam->coverage.size();i++)
+   		{
+   		double h = (bam->coverage[i]/bam->max_depth)*bam->height;
+   		XPoint pt;
+   		pt.x = i;
+   		pt.y = bam->y+bam->height - h;
+   		points.push_back(pt);
+   		}
+   ::XFillPolygon(this->display,this->window, gc, &points[0], (int)points.size(), Complex,CoordModeOrigin);
+   }
 }
 
 
-static int X11BamCov::callback(void *data, bam1_t *b)
-{
-    phaseg_t *g = (phaseg_t*)data;
-    int ret;
-    while (1)
-    {
-        ret = sam_read1(g->fp, g->fp_hdr, b);
-        if (ret < 0) break;
-        if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
-        if ( g->pre ) {
-            if (g->n == g->m) {
-                g->m = g->m? g->m<<1 : 16;
-                g->b = realloc(g->b, g->m * sizeof(bam1_t*));
-            }
-            g->b[g->n++] = bam_dup1(b);
-        }
-        break;
-    }
-    return ret;
-}
 
 
 void X11BamCov::repaint() {
 
-int max_depth = 0;
-
+int ret = 0;
 ChromStartEnd* rgn = this->regions[this->region_idx];
-
+double max_depth = 1.0;
+double bam_height = this->window_height/(double)bams.size();
+if(bam_height<=1) return;
+double y=0;
+bam1_t *b = ::bam_init1();
 
 //reload data for each bam
 for(auto bam: this->bams) {
+	bam->bad_flag = false;
+	bam->max_depth = 0.0;
+	bam->y=y;
+	bam->height  = bam_height;
+	y+= bam_height;
+	
 	bam->coverage.clear();
 	if(this->window_width<2) continue;
 	bam->coverage.resize(this->window_width,0);
+	
 	int tid = ::bam_name2id(bam->hdr, rgn->chrom.c_str());
 	if(tid<0) {
+		bam->bad_flag = true;
 		cerr << "[WARN] No chromosome " << rgn->chrom << " in "<< bam ->filename << endl;
 		continue;
 		}
+		
 	hts_itr_t *iter = ::sam_itr_queryi(bam->idx, tid,rgn->start,rgn->end);
-	bam_plp_t iterp = bam_plp_init(X11BamCov::callback, bam);
-	bam_pileup1_t *plp;
-	int tid2;
-	int pos;
-	int n;
-	while ((plp = bam_plp_auto(iterp, &tid2, &pos, &n)) != 0) {
+	while ((ret = bam_itr_next(bam->fp, iter, b)) >= 0)
+		{
+		const bam1_core_t *c = &b->core;
+		if ( c->flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
+		
+		uint32_t *cigar = bam_get_cigar(b);
+		if(cigar==NULL) continue;
+		
+		int ref1 = c->pos + 1;
+		for (int icig=0; icig< c->n_cigar && ref1 < rgn->end; icig++)
+    		{
+		    int op  = bam_cigar_opchr(cigar[icig]);
+		    int len = bam_cigar_oplen(cigar[icig]);
+		    
+	    	switch(op)
+	    		{
+	    		case BAM_CPAD: break;
+	    		case BAM_CINS: break;
+	    		case BAM_CDEL: case BAM_CREF_SKIP : ref1+=len; break;
+	    		case BAM_CSOFT_CLIP: case BAM_CHARD_CLIP:break;
+	    		case BAM_CMATCH: case BAM_CEQUAL : case BAM_CDIFF:
+	    			{
+	    			for(int x=0;x< len && ref1 < rgn->end ;++x) {
+	    				int array_idx = (int)(((ref1 - rgn->start)/(double)(rgn->end-rgn->start))*bam->coverage.size());
+	    				if(array_idx< 0 || array_idx >= (int)bam->coverage.size()) continue;
+	    				bam->coverage[array_idx]++;
+	    				bam->max_depth = std::max(max_depth,(double)bam->coverage[array_idx]);
+	    				}
+	    			break;
+	    			}
+	    		default: cerr << "boum ??" << endl;break;
+	    		}
+			}
 		}
-
-	 bam_plp_destroy(iterp);
-	
 	::hts_itr_destroy(iter);
+	max_depth = std::max(bam->max_depth,max_depth);
 	}
-
+::bam_destroy1(b);
+for(auto bam: this->bams) {
+	bam->max_depth = max_depth;
+	}
+paint();
 }
 
 void X11BamCov::resized() {

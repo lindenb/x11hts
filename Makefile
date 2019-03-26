@@ -1,7 +1,7 @@
-HSTLIB?=../htslib
+HTSLIB?=../htslib
 LIBS= -lX11 -lpthread -lhts -lz -llzma -lbz2
-LDFLAGS=-L/usr/X11R6/lib -L$(HSTLIB)
-INCLUDES=-I$(HSTLIB)
+LDFLAGS=-L/usr/X11R6/lib -L$(HTSLIB)
+INCLUDES=-I$(HTSLIB)
 CFLAGS=-Wall -std=c++11
 
 
