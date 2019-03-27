@@ -22,7 +22,7 @@ int main(int argc,char** argv) {
 		return EXIT_FAILURE;
 		}
 	if(strcmp(argv[1],"cnv")==0) {
-		return main_cnv(argc,&argv[1]);
+		return main_cnv(argc-1,&argv[1]);
 		}
 	else
 		{
