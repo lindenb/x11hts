@@ -1,7 +1,7 @@
 /*
 The MIT License (MIT)
 
-Copyright (c) 2016 Pierre Lindenbaum PhD.
+Copyright (c) 2019 Pierre Lindenbaum PhD.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -207,12 +207,12 @@ class Hershey
 			
 					if(p2.op == LINETO)
 						{
+						::XDrawLine(display, win, gc, (int)x1, (int)y1,(int)x2, (int)y2);
 						x1=x2;
 						y1=y2;
 						}
 					else
-						{cerr << x1 << ";" << y1 << ";" << x2 << ";" << y2 << endl;
-						::XDrawLine(display, win, gc, (int)x1, (int)y1,(int)x2, (int)y2);
+						{
 						x1=x2;
 						y1=y2;
 						}

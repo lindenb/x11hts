@@ -1,9 +1,27 @@
 /*
- * X11BamCov.cpp
- *
- *  Created on: Mar 25, 2019
- *      Author: lindenb
- */
+The MIT License (MIT)
+
+Copyright (c) 2019 Pierre Lindenbaum PhD.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*/
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <X11/Xutil.h>
@@ -148,6 +166,7 @@ class BamW
 	public:
 		X11BamCov* owner;
 		std::string filename;
+		std::string sample;
 		std::vector<float> coverage;
 		samFile *fp;
 		bam_hdr_t *hdr;  // the file header
@@ -160,7 +179,7 @@ class BamW
 		~BamW();
 	};
 
-BamW::BamW(X11BamCov* owner,std::string fn):owner(owner),filename(fn) {
+BamW::BamW(X11BamCov* owner,std::string fn):owner(owner),filename(fn),sample(fn) {
 	
 	fp = ::hts_open(fn.c_str(), "r");
 	if(fp==NULL) {
@@ -178,6 +197,26 @@ BamW::BamW(X11BamCov* owner,std::string fn):owner(owner),filename(fn) {
 		cerr << "Cannot open index for " << fn << "." << endl;
 		exit(EXIT_FAILURE);
 		}
+
+
+	if(hdr->text!=NULL)
+		{
+		
+		std::istringstream iss(hdr->text);
+		std::string line;
+       		 while(std::getline(iss, line, '\n'))
+			{
+			if(!starts_with(line,"@RG\t")) continue;
+			string::size_type  p = line.find("\tSM:");
+			if(p==string::npos) continue;
+			p+=4;
+			string::size_type  p2 = line.find("\t");
+			if(p2==string::npos) p2=line.size();
+			sample = line.substr(p,p2);
+			break;
+			}
+		}
+
 	}
 
 BamW::~BamW() {
@@ -266,10 +305,10 @@ for(auto bam: this->bams) {
    ::XFillPolygon(this->display,this->window, gc, &points[0], (int)points.size(), Complex,CoordModeOrigin);
 
    XSetForeground(this->display, gc, BlackPixel(this->display, this->screen_number));
-   hershey.paint(this->display,this->window, gc,bam->filename.c_str(),
+   hershey.paint(this->display,this->window, gc,bam->sample.c_str(),
 		bam->bounds.x,
 		bam->bounds.y+1,
-		std::min((int)bam->bounds.width,12*(int)bam->filename.size()),
+		std::min((int)bam->bounds.width,12*(int)bam->sample.size()),
 		20
 		);
    ::XDrawRectangle(this->display,this->window, gc,
@@ -452,10 +491,34 @@ void X11BamCov::resized() {
 int X11BamCov::doWork(int argc,char** argv) {
 	char* bam_list = NULL;
 	char* region_list = NULL;
-
+	char *file_out = NULL;
 	int opt;
-	while ((opt = getopt(argc, argv, "B:R:f:D:")) != -1) {
+	while ((opt = getopt(argc, argv, "B:R:f:D:o:vh")) != -1) {
 		switch (opt) {
+		case 'h':
+			cout << "cnv" << endl;
+			cout << "Motivation:\n  Displays Bam coverage" << endl;
+			cout << "Keys:\n";
+			cout << "  'S' save current segment in output file\n";
+			cout << "  '<-' previous interval\n";
+			cout << "  '->' next interval\n";
+			cout << "  'R'/'T' change column number\n";
+			cout << "  'Q'/'Esc' exit\n";
+			cout << "Options:\n";
+			cout << "  -h print help and exit\n";
+			cout << "  -v print version and exit\n";
+			cout << "  -o (FILE) save BED segment in that bed file (use key 'S')\n";
+			cout << "  -D (int) cap depth to that value\n";
+			cout << "  -B (FILE) list of path to indexed bam files\n";
+			cout << "  -R (FILE) bed file of regions of interest\n";
+			cout << "  -f (float) extend the regions by this factor\n";
+			return 0;
+		case 'v':
+			cout << "cnv\nAuthor: Pierre Lindenbaum PhD.\nCompilation: " << __DATE__ << endl;
+			return 0;
+		case 'o':
+			file_out = optarg;
+			break;
 		case 'D':
 			this->cap_depth = atoi(optarg);
 			break;
@@ -536,6 +599,17 @@ int X11BamCov::doWork(int argc,char** argv) {
 		return EXIT_FAILURE;
 		}
 	//
+	FILE* saveOut=NULL;
+	if(file_out!=NULL)
+		{
+		saveOut = fopen(file_out,"w");
+		if(saveOut==NULL) {
+			cerr << "Cannot open " << file_out << endl;
+			return EXIT_FAILURE;			
+			}
+		}
+
+	//
 	this->display = ::XOpenDisplay(NULL);
 	if (this->display == NULL) {
 	   cerr<<  "[FAILURE] Cannot open display." << endl;
@@ -591,6 +665,26 @@ int X11BamCov::doWork(int argc,char** argv) {
 				region_idx = (region_idx+1>=regions.size()?0:region_idx+1);
 				repaint();
 				}
+			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_S) && saveOut!=NULL)
+				{
+				ChromStartEnd* rgn = this->regions[this->region_idx];
+				fprintf(saveOut,"%s\t%d\t%d\n",
+					rgn->chrom.c_str(),
+					rgn->original_start-1,
+					rgn->original_end
+					);
+				cerr << "[INFO] SAVED" << endl;
+				}
+			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_R) && num_columns>1)
+				{
+				num_columns--;
+				repaint();
+				}
+			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_T) && num_columns+1<= (int)this->bams.size())
+				{
+				num_columns++;
+				repaint();
+				}
 			}
 		else if(evt.type ==   Expose)
 			{
@@ -600,6 +694,10 @@ int X11BamCov::doWork(int argc,char** argv) {
 
 	::XCloseDisplay(display);
 	display=NULL;
+	if(saveOut!=NULL)
+		{
+		fclose(saveOut);
+		}
 	return 0;
 	}
 
