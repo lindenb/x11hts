@@ -35,12 +35,14 @@ THE SOFTWARE.
 #include <limits.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <cerrno>
 
 #include <htslib/sam.h>
 #include <htslib/faidx.h>
 #include <htslib/kstring.h>
 #include <htslib/khash_str2int.h>
 
+#include "Palette.hh"
 #include "Hershey.hh"
 
 using namespace std;
@@ -85,9 +87,10 @@ public:
 	std::string chrom;
 	int start;
 	int end;
+	std::string label;
 	int original_start;
 	int original_end;
-	ChromStartEnd(std::string line) {
+	ChromStartEnd(std::string line):label("") {
 		std::string::size_type p1 = line.find('\t');
 		if(p1==string::npos) {
 			std::string::size_type p1 = line.find(':');
@@ -130,6 +133,7 @@ public:
 	int length() {
 		return 1+ (this->end - this->start);		
 		}
+
 	};
 
 
@@ -148,7 +152,7 @@ public:
 	Hershey hershey;
 	float extend_factor;
 	int num_columns;
-	XColor red,green,blue,dark_slate_gray,gray10,gray90;
+	Palette* palette;
 	int cap_depth;
 
 	X11BamCov();
@@ -183,7 +187,7 @@ BamW::BamW(X11BamCov* owner,std::string fn):owner(owner),filename(fn),sample(fn)
 	
 	fp = ::hts_open(fn.c_str(), "r");
 	if(fp==NULL) {
-		cerr << "Cannot open " << fn << "." << endl;
+		cerr << "Cannot open " << fn << ". " << ::strerror(errno) << endl;
 		exit(EXIT_FAILURE);
 		}
 	hdr = sam_hdr_read(fp); 
@@ -226,7 +230,7 @@ BamW::~BamW() {
 	}
 
 
-X11BamCov::X11BamCov() {
+X11BamCov::X11BamCov():palette(0) {
 	region_idx = 0UL;
 	window_width = 0;
 	window_height = 0;
@@ -243,10 +247,10 @@ X11BamCov::~X11BamCov() {
 	for(auto iter:regions) {
 		delete iter;
 		}
+	if(palette!=0) delete palette;
 	}
 #define MARGIN_TOP 20
 void X11BamCov::paint() {
-
 GC gc = ::XCreateGC(this->display, this->window, 0, 0);
 XSetForeground(this->display, gc, WhitePixel(this->display, this->screen_number));
 ::XFillRectangle(this->display,this->window, gc,0,0,this->window_width,this->window_height);
@@ -263,19 +267,45 @@ for(auto bam: this->bams) {
 XSetForeground(this->display, gc, BlackPixel(this->display, this->screen_number));
 
 ChromStartEnd* rgn = this->regions[this->region_idx];
-ostringstream os;
-os << rgn->chrom << ":" << niceInt(rgn->start) << "-" << niceInt(rgn->end) << " maxDepth :"<< max_depth << " length: "<< niceInt(rgn->length()) ;
-string title= os.str();
-int title_width= title.size()*12;
-hershey.paint(this->display,this->window, gc,title.c_str(),
-		this->window_width/2 - title_width/2,
-		1,
-		title_width,
-		MARGIN_TOP-2
-		);
+string win_title;
+{
+	ostringstream os;
+	os << rgn->chrom << ":" << niceInt(rgn->start) << "-" << niceInt(rgn->end);
+	win_title.assign(os.str());
+	XStoreName(this->display,this->window,win_title.c_str());
+}
 
+	{
+	ostringstream os;
+	os << win_title
+			<< " maxDepth:"<< max_depth << " length: "<< niceInt(rgn->length()) << rgn->label
+			<< " (" << niceInt(this->region_idx+1) << "/"
+			<< niceInt((int)this->regions.size()) << ")"
+			;
+	string title= os.str();
+	int title_width= title.size()*12;
+	hershey.paint(this->display,this->window, gc,title.c_str(),
+			this->window_width/2 - title_width/2,
+			1,
+			title_width,
+			MARGIN_TOP-2
+			);
+	}
 
 for(auto bam: this->bams) {
+
+	int ruledy=1.0;
+	if(bam->max_depth>100) {
+		ruledy=100;
+	} if(bam->max_depth>50) {
+		ruledy=10;
+	} else if(bam->max_depth>10) {
+		ruledy=5;
+	}else
+	{
+		ruledy=1;
+	}
+
    vector<XPoint> points;
    XPoint pt1={(pixel_t)bam->bounds.x,(pixel_t)(bam->bounds.y+bam->bounds.height)};
    points.push_back(pt1);
@@ -297,11 +327,21 @@ for(auto bam: this->bams) {
   if(rgn->start!=rgn->original_start || rgn->end!=rgn->original_end) {
   	pixel_t x1 = (pixel_t)(bam->bounds.x + ((rgn->original_start-rgn->start)/(double)rgn->length())*bam->bounds.width);
 	pixel_t x2 = (pixel_t)(bam->bounds.x + ((rgn->original_end-rgn->start)/(double)rgn->length())*bam->bounds.width);
-	XSetForeground(this->display, gc,gray90.pixel);
+	XSetForeground(this->display, gc,palette->gray(0.9).pixel);
 	::XFillRectangle(this->display,this->window, gc,x1,bam->bounds.y,(x2-x1),bam->bounds.height);
   }
+  // print ruler
+  double curr_depth = ruledy;
+  while(curr_depth <= bam->max_depth) {
+   	  double y =  bam->bounds.y + bam->bounds.height- ((curr_depth/bam->max_depth) * bam->bounds.height);
+	  if(y <  bam->bounds.y) break;
+	  XSetForeground(this->display, gc,palette->gray(0.8).pixel);
+	  XDrawLine(this->display, this->window, gc, (int)bam->bounds.x, (int)y,(int)(bam->bounds.x+bam->bounds.width), (int)y);
+	  curr_depth+=ruledy;
+  	  }
 
-   XSetForeground(this->display, gc,dark_slate_gray.pixel);
+
+   XSetForeground(this->display, gc,palette->dark_slate_gray.pixel);
    ::XFillPolygon(this->display,this->window, gc, &points[0], (int)points.size(), Complex,CoordModeOrigin);
 
    XSetForeground(this->display, gc, BlackPixel(this->display, this->screen_number));
@@ -311,6 +351,28 @@ for(auto bam: this->bams) {
 		std::min((int)bam->bounds.width,12*(int)bam->sample.size()),
 		20
 		);
+
+   curr_depth = ruledy;
+   while(curr_depth <= bam->max_depth) {
+   	  double y =  bam->bounds.y + bam->bounds.height- ((curr_depth/bam->max_depth) * bam->bounds.height);
+   	  if(y <  bam->bounds.y) break;
+   	  XSetForeground(this->display, gc,palette->gray(0.8).pixel);
+   	  XDrawLine(this->display, this->window, gc, (int)bam->bounds.x, (int)y,(int)(bam->bounds.x+bam->bounds.width), (int)y);
+   	  XSetForeground(this->display, gc,palette->gray(0.1).pixel);
+   	  char tmp[20];
+   	  sprintf(tmp,"%d",(int)curr_depth);
+   	  if(y-7 > bam->bounds.y) {
+		  hershey.paint(this->display,this->window,gc,
+				tmp,
+				bam->bounds.x+1,
+				(int)y-7,
+				(int)7*strlen(tmp),
+				7
+				);
+		  }
+   	  curr_depth+=ruledy;
+     }
+
    ::XDrawRectangle(this->display,this->window, gc,
 		bam->bounds.x,
 		bam->bounds.y,
@@ -620,16 +682,9 @@ int X11BamCov::doWork(int argc,char** argv) {
 
 	 this->screen_number = DefaultScreen(this->display);
 
-	 Colormap scr_cmap = DefaultColormap(this->display,  this->screen_number);
-	 XAllocNamedColor(this->display, scr_cmap, "blue", &blue, &blue);
-	 XAllocNamedColor(this->display, scr_cmap, "red", &red, &red);
-	 XAllocNamedColor(this->display, scr_cmap, "green", &green, &green);
-	 XAllocNamedColor(this->display, scr_cmap, "gray10",&gray10,&gray10);
-	 XAllocNamedColor(this->display, scr_cmap, "gray90",&gray90,&gray90);
- 	 XAllocNamedColor(this->display, scr_cmap, "dark slate gray", &dark_slate_gray, &dark_slate_gray);
+	 this->palette = new Palette(this->display,  this->screen_number);
 
-
-	 screen = ::XScreenOfDisplay(this->display, this->screen_number);
+	 this->screen = ::XScreenOfDisplay(this->display, this->screen_number);
 	 this->window = ::XCreateSimpleWindow(
 			 display,
 			 RootWindow(this->display,  this->screen_number),

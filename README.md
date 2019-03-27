@@ -5,8 +5,38 @@ X11 related utilities for hts
 
 Pierre Lindenbaum PhD / @yokofakun 2019
 
+## Compilation
+
+dependencies:
+
+  * **X11/dev** libraries 
+  * **htslib** :  https://github.com/samtools/htslib 
+
+compile using make, specifying the path to HTSLIB
+
+```
+ $ make HTSLIB=${HOME}/packages/htslib
+ ```
+
+should generate a program named `x11hts`
+
+sometimes you may have to specify the env variable `LD_LIBRARY_PATH`
+
+```
+export LD_LIBRARY_PATH=/home/lindenb/packages/htslib
+```
+
+
+
 # CNV
   Displays Bam coverage
+
+## Example
+
+```
+./x11hts cnv -B bam.list -f 0.3 -R input.bed
+```
+
 
 ## Keys
 
