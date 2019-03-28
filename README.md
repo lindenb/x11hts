@@ -1,4 +1,9 @@
+![works on my machine](https://img.shields.io/badge/works-on%20my%20machine-green.png)
+
+![Last commit](https://img.shields.io/github/last-commit/lindenb/x11hts.png)
+
 # x11hts
+
 X11 related utilities for hts
 
 ## Author
