@@ -230,9 +230,9 @@ BamW::BamW(X11BamCov* owner,std::string fn):owner(owner),filename(fn),sample(fn)
 			string::size_type  p = line.find("\tSM:");
 			if(p==string::npos) continue;
 			p+=4;
-			string::size_type  p2 = line.find("\t");
+			string::size_type  p2 = line.find("\t",p);
 			if(p2==string::npos) p2=line.size();
-			sample = line.substr(p,p2);
+			sample = line.substr(p,(p2-p));
 			break;
 			}
 		}
