@@ -49,83 +49,98 @@ using namespace std;
 
 class BamW;
 
+#define THROW_INVALID_ARG(a) do {\
+	cerr << a << endl;\
+	ostringstream _os; _os << "[ERROR]" << __FILE__ <<":" << __LINE__ << ": " << a ; \
+	throw invalid_argument(_os.str());\
+	} while(0)
+
 typedef short pixel_t;
 
+/** convert string to int */
 static int parseInt(const char* s) {
-char* p2;
-errno=0;
-long int i = strtol(s,&p2,10);
-if(*p2!=0 || errno!=0) {
-	cerr << "bad number " << s << endl;
-	exit(EXIT_FAILURE);
+	char* p2;
+	errno=0;
+	long int i = strtol(s,&p2,10);
+	if(*p2!=0 || errno!=0) THROW_INVALID_ARG("Bad number \"" << s << "\". Cannot convert to integer.");
+	return (int)i;
 	}
-return i;
-}
 
+/** convert int to string with comma sep */
 static string niceInt(int i) {
 	ostringstream os;
 	os << i;
-	string s1=os.str();
+	string s1(os.str());
 	string s2;
 	for(size_t k=0; k < s1.length();k++)
 		{
-		if(k>0 && k%3==0) s2=","+s2;
-		s2= s1[(s1.length()-1)-k]+s2;
+		if(k>0 && k%3==0) s2.insert(0,",",1);
+		s2.insert(0,s1,(s1.length()-1)-k,1);
 		}
 	return s2;
 	}
 
+/** return true if s1 starts with s2 */
 static bool starts_with(std::string s1,const char* s2) {
 	size_t len2=strlen(s2);
 	if(len2> s1.size()) return false;
 	return s1.compare(0,len2, s2) == 0;
 	}
 
+/** an interval */
 class ChromStartEnd
 	{
 public:
+	/* chrom */
 	std::string chrom;
+	/* start, 1-based, after extending */
 	int start;
+	/* end, 1-based, after extending */
 	int end;
+	/** remaining element in the bed file , 4th column */
 	std::string label;
+	/* start before extending */
 	int original_start;
+	/* end, before extending */
 	int original_end;
+	/** constructor: accept bed or interval */
 	ChromStartEnd(std::string line):label("") {
-		std::string::size_type p1 = line.find('\t');
-		if(p1==string::npos) {
-			std::string::size_type p1 = line.find(':');
-			if(p1==string::npos) {
-				ostringstream os;
-				os << "cannot find first tab or colon in " << line ;
-				throw invalid_argument(os.str());
-				}
+		std::string::size_type tab = line.find('\t');
+		std::string::size_type colon = line.find(':');
+		std::string::size_type p3;
+		if(colon!=string::npos && (tab==string::npos || tab > colon) ) {
+			std::string::size_type p1 = colon;
+			if(p1==string::npos) THROW_INVALID_ARG("cannot find first tab or colon in " << line) ;			
 			std::string::size_type p2 = line.find('-',p1+1);
-			if(p2==string::npos) {
-				ostringstream os;
-				os << "cannot find hyphen in " << line ;
-				throw invalid_argument(os.str());
-				}
+			if(p2==string::npos) THROW_INVALID_ARG("cannot find hyphen in " << line);
+			p3 = line.find_first_of(" \t",p2+1);
+			if(p3==string::npos) p3=line.length();
+
 			this->chrom.assign(line.substr(0,p1));
 			this->start= parseInt(line.substr(p1+1,p2-(p1+1)).c_str());
-			this->end= parseInt(line.substr(p2+1).c_str());
+			this->end= parseInt(line.substr(p2+1,(p3-(p2+1))).c_str());
+			
+
 			}
-		else
+		else if(tab!=string::npos)
 			{
+			std::string::size_type p1 = tab;
 			std::string::size_type p2 = line.find('\t',p1+1);
-			if(p2==string::npos) {
-				ostringstream os;
-				os << "cannot find second tab in " << line ;
-				throw invalid_argument(os.str());
-				}
+			if(p2==string::npos) THROW_INVALID_ARG( "cannot find second tab in " << line) ;
 			std::string::size_type p3 = line.find('\t',p2+1);
 			if(p3==string::npos) p3=line.length();
 			this->chrom.assign(line.substr(0,p1));
 			this->start= 1 + parseInt(line.substr(p1+1,p2-(p1+1)).c_str());
-			this->end= parseInt(line.substr(p2+1,p3).c_str());
+			this->end= parseInt(line.substr(p2+1,(p3-(p2+1))).c_str());
 			}
-		if(this->start >= this->end) {
-			cerr << "[FATAL] Empty/negative interval " << line << endl;
-			exit(EXIT_FAILURE);			
+		else
+			{
+			THROW_INVALID_ARG("Bad interval " << line);	
+			}
+		if(this->chrom.empty()) THROW_INVALID_ARG("Empty chrom in " << line);
+		if(this->start >= this->end) THROW_INVALID_ARG("Empty/negative interval " << line);		
+		if(p3<line.size()) {
+			this->label.assign(line.substr(p3+1));			
 			}
 		this->original_start = this->start;
 		this->original_end = this->end;
@@ -278,7 +293,8 @@ string win_title;
 	{
 	ostringstream os;
 	os << win_title
-			<< " maxDepth:"<< max_depth << " length: "<< niceInt(rgn->length()) << rgn->label
+			<< " maxDepth:"<< max_depth << " length: "<< niceInt(rgn->length())
+			<< " \"" << rgn->label << "\" "
 			<< " (" << niceInt(this->region_idx+1) << "/"
 			<< niceInt((int)this->regions.size()) << ")"
 			;
@@ -344,14 +360,15 @@ for(auto bam: this->bams) {
    XSetForeground(this->display, gc,palette->dark_slate_gray.pixel);
    ::XFillPolygon(this->display,this->window, gc, &points[0], (int)points.size(), Complex,CoordModeOrigin);
 
-   XSetForeground(this->display, gc, BlackPixel(this->display, this->screen_number));
+   XSetForeground(this->display, gc, palette->gray(0.9).pixel);
+   XSetFunction(this->display, gc, GXxor);
    hershey.paint(this->display,this->window, gc,bam->sample.c_str(),
 		bam->bounds.x,
 		bam->bounds.y+1,
 		std::min((int)bam->bounds.width,12*(int)bam->sample.size()),
 		20
 		);
-
+  
    curr_depth = ruledy;
    while(curr_depth <= bam->max_depth) {
    	  double y =  bam->bounds.y + bam->bounds.height- ((curr_depth/bam->max_depth) * bam->bounds.height);
@@ -372,7 +389,7 @@ for(auto bam: this->bams) {
 		  }
    	  curr_depth+=ruledy;
      }
-
+   XSetFunction(this->display, gc, GXcopy);
    ::XDrawRectangle(this->display,this->window, gc,
 		bam->bounds.x,
 		bam->bounds.y,
@@ -380,6 +397,7 @@ for(auto bam: this->bams) {
 		bam->bounds.height
 		);
    }
+XFlush(this->display);
 }
 
 
@@ -418,11 +436,11 @@ for(auto bam: this->bams) {
 	bam->bounds.x = curr_x*rect_w;
 	bam->bounds.width = rect_w;
 	bam->bounds.height = rect_h;
-	curr_y++;
-	if(curr_y>=n_rows)
+	curr_x++;
+	if(curr_x>=this->num_columns)
 		{
-		curr_y=0;
-		curr_x++;
+		curr_x=0;
+		curr_y++;
 		}
 	
 

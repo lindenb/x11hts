@@ -39,12 +39,24 @@ int main(int argc,char** argv) {
 		usage();
 		return EXIT_FAILURE;
 		}
-	if(strcmp(argv[1],"cnv")==0) {
-		return main_cnv(argc-1,&argv[1]);
+	try	{
+		if(strcmp(argv[1],"cnv")==0) {
+			return main_cnv(argc-1,&argv[1]);
+			}
+		else
+			{
+			cerr << "unknown command \""<< argv[1] << "\"." << endl;
+			return EXIT_FAILURE;
+			}
 		}
-	else
+	catch(std::exception err)
 		{
-		cerr << "unknown command \""<< argv[1] << "\"." << endl;
+		cerr << "[FATAL] An error occured \""<< err.what() << "\"." << endl;
+		return EXIT_FAILURE;
+		}
+	catch(...)
+		{
+		cerr << "[FATAL] An error occured." << endl;
 		return EXIT_FAILURE;
 		}
 	}

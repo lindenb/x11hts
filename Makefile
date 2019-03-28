@@ -13,8 +13,11 @@ x11hts : X11Hts.cpp X11BamCov.cpp
 
 test: x11hts
 	find ${HOME}/src/jvarkit-git/src/test/resources/ -name "S*.bam" > jeter.bam.list
-	echo "RF01:1-1000" > jeter.bed
-	echo "RF02:1-1000" >> jeter.bed
+	find ${HOME}/src/jvarkit-git/src/test/resources/ -name "S*.bam" >> jeter.bam.list
+	find ${HOME}/src/jvarkit-git/src/test/resources/ -name "S*.bam" >> jeter.bam.list
+	echo "RF01:1-1000 pim" > jeter.bed
+	echo "RF02:1-1000	PAM" >> jeter.bed
+	echo "RF03	1	1000	POUM" >> jeter.bed
 	./x11hts cnv -D 5 -B jeter.bam.list -f 0.3 -R jeter.bed
 
 clean:
