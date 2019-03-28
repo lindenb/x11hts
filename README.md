@@ -10,6 +10,10 @@ X11 related utilities for hts
 
 Pierre Lindenbaum PhD / @yokofakun 2019
 
+## Screenshot
+
+![https://twitter.com/yokofakun/status/1111224539307016193](https://pbs.twimg.com/media/D2vcmoOWoAADKe8.jpg)
+
 ## Compilation
 
 dependencies:
@@ -25,7 +29,13 @@ compile using make, specifying the path to HTSLIB
 
 should generate a program named `x11hts`
 
-sometimes you may have to specify the env variable `LD_LIBRARY_PATH`
+sometimes you may get this message:
+
+```
+x11hts: error while loading shared libraries: libhts.so.1: cannot open shared object file: No such file or directory
+```
+
+and you'll have to set the e `LD_LIBRARY_PATH`
 
 ```
 export LD_LIBRARY_PATH=/home/lindenb/packages/htslib
@@ -43,24 +53,12 @@ export LD_LIBRARY_PATH=/home/lindenb/packages/htslib
 ```
 
 
-## Keys
-
-  * 'S' save current segment in output file
-  * '<-' previous interval
-  * '->' next interval
-  * 'R'/'T' change column number
-  * 'Q'/'Esc' exit
-
 ## Options
 
+run the following command to display the options & keys:
+
 ```
-  -h print help and exit
-  -v print version and exit
-  -o (FILE) save BED segment in that bed file (use key 'S')
-  -D (int) cap depth to that value
-  -B (FILE) list of path to indexed bam files
-  -R (FILE) bed file of regions of interest
-  -f (float) extend the regions by this factor
+x11hts cnv -h
 ```
 
 

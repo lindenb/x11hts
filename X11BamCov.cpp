@@ -169,14 +169,15 @@ public:
 	int num_columns;
 	Palette* palette;
 	int cap_depth;
-
+	bool show_sample_name;
+	int smooth_factor;
 	X11BamCov();
 	~X11BamCov();
 	int doWork(int argc,char** argv);
 	void repaint();
 	void paint();
 	void resized();
-
+	void usage(std::ostream& out);
 	};
 
 
@@ -245,7 +246,7 @@ BamW::~BamW() {
 	}
 
 
-X11BamCov::X11BamCov():palette(0) {
+X11BamCov::X11BamCov():palette(0),show_sample_name(true),smooth_factor(20) {
 	region_idx = 0UL;
 	window_width = 0;
 	window_height = 0;
@@ -360,22 +361,21 @@ for(auto bam: this->bams) {
    XSetForeground(this->display, gc,palette->dark_slate_gray.pixel);
    ::XFillPolygon(this->display,this->window, gc, &points[0], (int)points.size(), Complex,CoordModeOrigin);
 
-   XSetForeground(this->display, gc, palette->gray(0.9).pixel);
-   XSetFunction(this->display, gc, GXxor);
-   hershey.paint(this->display,this->window, gc,bam->sample.c_str(),
-		bam->bounds.x,
-		bam->bounds.y+1,
-		std::min((int)bam->bounds.width,12*(int)bam->sample.size()),
-		20
-		);
+ 
+  
+
+
   
    curr_depth = ruledy;
    while(curr_depth <= bam->max_depth) {
    	  double y =  bam->bounds.y + bam->bounds.height- ((curr_depth/bam->max_depth) * bam->bounds.height);
    	  if(y <  bam->bounds.y) break;
    	  XSetForeground(this->display, gc,palette->gray(0.8).pixel);
+	  XSetFunction(this->display, gc, GXxor);
    	  XDrawLine(this->display, this->window, gc, (int)bam->bounds.x, (int)y,(int)(bam->bounds.x+bam->bounds.width), (int)y);
-   	  XSetForeground(this->display, gc,palette->gray(0.1).pixel);
+          XSetFunction(this->display, gc, GXcopy);
+
+   	  XSetForeground(this->display, gc,palette->gray(0.5).pixel);
    	  char tmp[20];
    	  sprintf(tmp,"%d",(int)curr_depth);
    	  if(y-7 > bam->bounds.y) {
@@ -389,7 +389,20 @@ for(auto bam: this->bams) {
 		  }
    	  curr_depth+=ruledy;
      }
-   XSetFunction(this->display, gc, GXcopy);
+   
+
+  
+
+  if(this->show_sample_name) {
+        XSetForeground(this->display, gc, palette->gray(0.1).pixel);
+      hershey.paint(this->display,this->window, gc,bam->sample.c_str(),
+		bam->bounds.x,
+		bam->bounds.y+1,
+		std::min((int)bam->bounds.width,12*(int)bam->sample.size()),
+		std::min(20,(int)(bam->bounds.height/10))
+		);
+	}
+   XSetForeground(this->display, gc, palette->gray(0.0).pixel);
    ::XDrawRectangle(this->display,this->window, gc,
 		bam->bounds.x,
 		bam->bounds.y,
@@ -510,10 +523,12 @@ for(auto bam: this->bams) {
 	::hts_itr_destroy(iter);
 	if(this->cap_depth>0) bam->max_depth=std::min(bam->max_depth,(double)this->cap_depth);
 
-	int smooth=5;
+	int smooth=0;
+	if(smooth_factor>1) smooth = (int)(coverage.size()/(double)this->smooth_factor);
 	if(smooth>0) {
 		vector<int> smoothed;
-		smoothed.resize(coverage.size(),0);	
+		smoothed.resize(coverage.size(),0);
+		std::fill(smoothed.begin(),smoothed.end(),0);
 		for(int i=0;i< (int)coverage. size();i++)
 			{
 			double total=0;
@@ -567,31 +582,43 @@ void X11BamCov::resized() {
 	}
 
 
+void X11BamCov::usage(std::ostream& out)
+	{
+	out << "cnv" << endl;
+	out << "Motivation:\n  Displays Bam coverage" << endl;
+	out << "Keys:\n";
+	out << "  'S' save current segment in output file. See option '-o'.\n";
+	out << "  '<-' previous interval\n";
+	out << "  '->' next interval\n";
+	out << "  'R'/'T' change column number\n";
+	out << "  'Q'/'Esc' exit\n";
+	out << "  'N' toggle show/hide sample name\n";
+	out << "Options:\n";
+	out << "  -h print help and exit\n";
+	out << "  -v print version and exit\n";
+	out << "  -o (FILE) save BED segment in that bed file (use key 'S')\n";
+	out << "  -D (int) cap depth to that value. Negative=ignore [-1]\n";
+	out << "  -B (FILE) list of path to indexed bam files\n";
+	out << "  -R (FILE) bed file of regions of interest. optional 4th column is used as a label\n";
+	out << "  -f (float) extend the regions by this factor. e.g: 0.3 [" << extend_factor << "]\n";
+        out << "  -s (int) smooth factor. Smooth using a sliding window of 'region-length'/'s'. 0=ignore. [" << smooth_factor<<"]\n";
+	}
 
 int X11BamCov::doWork(int argc,char** argv) {
 	char* bam_list = NULL;
 	char* region_list = NULL;
 	char *file_out = NULL;
 	int opt;
-	while ((opt = getopt(argc, argv, "B:R:f:D:o:vh")) != -1) {
+	
+	if(argc<=1) {
+		usage(cerr);
+		return EXIT_FAILURE;
+		}
+
+	while ((opt = getopt(argc, argv, "B:R:f:D:o:vhs:")) != -1) {
 		switch (opt) {
 		case 'h':
-			cout << "cnv" << endl;
-			cout << "Motivation:\n  Displays Bam coverage" << endl;
-			cout << "Keys:\n";
-			cout << "  'S' save current segment in output file\n";
-			cout << "  '<-' previous interval\n";
-			cout << "  '->' next interval\n";
-			cout << "  'R'/'T' change column number\n";
-			cout << "  'Q'/'Esc' exit\n";
-			cout << "Options:\n";
-			cout << "  -h print help and exit\n";
-			cout << "  -v print version and exit\n";
-			cout << "  -o (FILE) save BED segment in that bed file (use key 'S')\n";
-			cout << "  -D (int) cap depth to that value\n";
-			cout << "  -B (FILE) list of path to indexed bam files\n";
-			cout << "  -R (FILE) bed file of regions of interest\n";
-			cout << "  -f (float) extend the regions by this factor\n";
+			usage(cout);
 			return 0;
 		case 'v':
 			cout << "cnv\nAuthor: Pierre Lindenbaum PhD.\nCompilation: " << __DATE__ << endl;
@@ -610,6 +637,9 @@ int X11BamCov::doWork(int argc,char** argv) {
 			break;
 		case 'f': 
 			this->extend_factor = atof(optarg);
+			break;
+		case 's': 
+			this->smooth_factor = atof(optarg);
 			break;
 		case '?':
 			cerr << "unknown option -"<< (char)optopt << endl;
@@ -758,6 +788,13 @@ int X11BamCov::doWork(int argc,char** argv) {
 				num_columns++;
 				repaint();
 				}
+			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_N))
+				{
+				show_sample_name = !show_sample_name;
+				repaint();
+				}
+	
+
 			}
 		else if(evt.type ==   Expose)
 			{

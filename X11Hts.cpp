@@ -30,13 +30,16 @@ using namespace std;
 
 extern int main_cnv(int argc,char** argv);
 
-static void usage() {
-
+static void usage(std::ostream& out) {
+out << "x11hts\nAuthor: Pierre Lindenbaum PhD.\nCompilation: " << __DATE__ << endl;
+out << "Usage:" << endl;
+out << "    x11hts cnv [options]" << endl;
+out << endl;
 }
 
 int main(int argc,char** argv) {
 	if(argc<2) {
-		usage();
+		usage(cerr);
 		return EXIT_FAILURE;
 		}
 	try	{
