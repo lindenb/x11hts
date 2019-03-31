@@ -42,8 +42,13 @@ THE SOFTWARE.
 #include <htslib/kstring.h>
 #include <htslib/khash_str2int.h>
 
+#include "X11Launcher.hh"
+#include "Utils.hh"
+#include "SAMFile.hh"
 #include "Palette.hh"
 #include "Hershey.hh"
+#include "version.hh"
+#include "macros.hh"
 
 using namespace std;
 
@@ -57,35 +62,8 @@ class BamW;
 
 typedef short pixel_t;
 
-/** convert string to int */
-static int parseInt(const char* s) {
-	char* p2;
-	errno=0;
-	long int i = strtol(s,&p2,10);
-	if(*p2!=0 || errno!=0) THROW_INVALID_ARG("Bad number \"" << s << "\". Cannot convert to integer.");
-	return (int)i;
-	}
 
-/** convert int to string with comma sep */
-static string niceInt(int i) {
-	ostringstream os;
-	os << i;
-	string s1(os.str());
-	string s2;
-	for(size_t k=0; k < s1.length();k++)
-		{
-		if(k>0 && k%3==0) s2.insert(0,",",1);
-		s2.insert(0,s1,(s1.length()-1)-k,1);
-		}
-	return s2;
-	}
 
-/** return true if s1 starts with s2 */
-static bool starts_with(std::string s1,const char* s2) {
-	size_t len2=strlen(s2);
-	if(len2> s1.size()) return false;
-	return s1.compare(0,len2, s2) == 0;
-	}
 
 /** an interval */
 class ChromStartEnd
@@ -117,8 +95,8 @@ public:
 			if(p3==string::npos) p3=line.length();
 
 			this->chrom.assign(line.substr(0,p1));
-			this->start= parseInt(line.substr(p1+1,p2-(p1+1)).c_str());
-			this->end= parseInt(line.substr(p2+1,(p3-(p2+1))).c_str());
+			this->start= Utils::parseInt(line.substr(p1+1,p2-(p1+1)).c_str());
+			this->end= Utils::parseInt(line.substr(p2+1,(p3-(p2+1))).c_str());
 			
 
 			}
@@ -130,8 +108,8 @@ public:
 			std::string::size_type p3 = line.find('\t',p2+1);
 			if(p3==string::npos) p3=line.length();
 			this->chrom.assign(line.substr(0,p1));
-			this->start= 1 + parseInt(line.substr(p1+1,p2-(p1+1)).c_str());
-			this->end= parseInt(line.substr(p2+1,(p3-(p2+1))).c_str());
+			this->start= 1 + Utils::parseInt(line.substr(p1+1,p2-(p1+1)).c_str());
+			this->end= Utils::parseInt(line.substr(p2+1,(p3-(p2+1))).c_str());
 			}
 		else
 			{
@@ -152,22 +130,17 @@ public:
 	};
 
 
-class X11BamCov
+
+
+
+class X11BamCov: public X11Launcher
 	{
 public:
-	Display *display;
-	Screen *screen;
-	int screen_number;
-	Window window;
 	std::vector<BamW*> bams;
 	std::vector<ChromStartEnd*> regions;
 	size_t region_idx;
-	int window_width;
-	int window_height;
-	Hershey hershey;
 	float extend_factor;
 	int num_columns;
-	Palette* palette;
 	int cap_depth;
 	bool show_sample_name;
 	int smooth_factor;
@@ -176,73 +149,45 @@ public:
 	int doWork(int argc,char** argv);
 	void repaint();
 	void paint();
-	void resized();
 	void usage(std::ostream& out);
 	};
 
 
-class BamW
+class X11BamCovFileFactory: public SAMFileFactory
+	{
+public:
+	X11BamCov* owner;
+	X11BamCovFileFactory(X11BamCov* owner);
+	virtual X11BamCovFileFactory();
+	virtual SAMFile* createInstance();
+	};
+
+class BamW : public SAMFile
 	{
 	public:
 		X11BamCov* owner;
-		std::string filename;
 		std::string sample;
 		std::vector<float> coverage;
-		samFile *fp;
-		bam_hdr_t *hdr;  // the file header
-		hts_idx_t *idx = NULL;
 		bool bad_flag;
 		double max_depth;
 		XRectangle bounds;
 		
-		BamW(X11BamCov* owner,std::string fn);
+		BamW(X11BamCov* owner);
 		~BamW();
 	};
 
-BamW::BamW(X11BamCov* owner,std::string fn):owner(owner),filename(fn),sample(fn) {
-	
-	fp = ::hts_open(fn.c_str(), "r");
-	if(fp==NULL) {
-		cerr << "Cannot open " << fn << ". " << ::strerror(errno) << endl;
-		exit(EXIT_FAILURE);
-		}
-	hdr = sam_hdr_read(fp); 
-	if (hdr == NULL) {
-            cerr << "Cannot open header for " << fn << "." << endl;
-            exit(EXIT_FAILURE);
-            }
+X11BamCovFileFactory::X11BamCovFileFactory(X11BamCov* owner):owner(owner){
+}
 
-	idx = sam_index_load(this->fp,fn.c_str());
-	if(idx==NULL) {
-		cerr << "Cannot open index for " << fn << "." << endl;
-		exit(EXIT_FAILURE);
-		}
+SAMFile* X11BamCovFileFactory::createInstance() {
+	BamW* instance= new BamW(this->owner);
+	return instance;
+}
 
-
-	if(hdr->text!=NULL)
-		{
-		
-		std::istringstream iss(hdr->text);
-		std::string line;
-       		 while(std::getline(iss, line, '\n'))
-			{
-			if(!starts_with(line,"@RG\t")) continue;
-			string::size_type  p = line.find("\tSM:");
-			if(p==string::npos) continue;
-			p+=4;
-			string::size_type  p2 = line.find("\t",p);
-			if(p2==string::npos) p2=line.size();
-			sample = line.substr(p,(p2-p));
-			break;
-			}
-		}
-
+BamW::BamW(X11BamCov* owner):max_depth(0),bad_flag(false),owner(owner) {
 	}
 
 BamW::~BamW() {
-	::hts_idx_destroy(idx);
-	::bam_hdr_destroy(hdr);
-	::hts_close(fp);
 	}
 
 
@@ -263,7 +208,6 @@ X11BamCov::~X11BamCov() {
 	for(auto iter:regions) {
 		delete iter;
 		}
-	if(palette!=0) delete palette;
 	}
 #define MARGIN_TOP 20
 void X11BamCov::paint() {
@@ -286,7 +230,7 @@ ChromStartEnd* rgn = this->regions[this->region_idx];
 string win_title;
 {
 	ostringstream os;
-	os << rgn->chrom << ":" << niceInt(rgn->start) << "-" << niceInt(rgn->end);
+	os << rgn->chrom << ":" << Utils::niceInt(rgn->start) << "-" << Utils::niceInt(rgn->end);
 	win_title.assign(os.str());
 	XStoreName(this->display,this->window,win_title.c_str());
 }
@@ -294,10 +238,10 @@ string win_title;
 	{
 	ostringstream os;
 	os << win_title
-			<< " maxDepth:"<< max_depth << " length: "<< niceInt(rgn->length())
+			<< " maxDepth:"<< max_depth << " length: "<< Utils::niceInt(rgn->length())
 			<< " \"" << rgn->label << "\" "
-			<< " (" << niceInt(this->region_idx+1) << "/"
-			<< niceInt((int)this->regions.size()) << ")"
+			<< " (" << Utils::niceInt(this->region_idx+1) << "/"
+			<< Utils::niceInt((int)this->regions.size()) << ")"
 			;
 	string title= os.str();
 	int title_width= title.size()*12;
@@ -464,18 +408,7 @@ for(auto bam: this->bams) {
 	
 	
 
-	int tid = ::bam_name2id(bam->hdr, rgn->chrom.c_str());
-	if(tid<0 && starts_with(rgn->chrom,"chr"))
-		{
-		string ctg2 = rgn->chrom.substr(3);
-		tid = ::bam_name2id(bam->hdr, ctg2.c_str());
-		}
-	if(tid<0 && !starts_with(rgn->chrom,"chr"))
-		{
-		string ctg2 = "chr";
-		ctg2.append(rgn->chrom);
-		tid = ::bam_name2id(bam->hdr, ctg2.c_str());
-		}
+	int tid = bam->contigToTid(rgn->chrom.c_str());
 
 	if(tid<0) {
 		bam->bad_flag = true;
@@ -569,17 +502,6 @@ for(auto bam: this->bams) {
 paint();
 }
 
-void X11BamCov::resized() {
-	//int x,y,wr;
-	//unsigned int w,h,bw, d;
-	 XWindowAttributes att;
-	::XGetWindowAttributes(display, window, &att);
-	if(att.width!=this->window_width || att.height!=this->window_height) {
-		this->window_width = att.width;
-		this->window_height =  att.height;
-		repaint();
-		}
-	}
 
 
 void X11BamCov::usage(std::ostream& out)
@@ -621,7 +543,7 @@ int X11BamCov::doWork(int argc,char** argv) {
 			usage(cout);
 			return 0;
 		case 'v':
-			cout << "cnv\nAuthor: Pierre Lindenbaum PhD.\nCompilation: " << __DATE__ << endl;
+			cout << X11HTS_VERSION << endl;
 			return 0;
 		case 'o':
 			file_out = optarg;
@@ -664,9 +586,16 @@ int X11BamCov::doWork(int argc,char** argv) {
 		return EXIT_FAILURE;
 		}
 	string line;
+	X11BamCovFileFactory samFileFactory(this);
 	while(getline(bamin,line)) {
 		if(line.empty() || line[0]=='#') continue;
-		BamW* bamFile	 = new BamW(this,line);
+		BamW* bamFile	 = (BamW*)samFileFactory.open(line.c_str());
+		if(bamFile->sample.empty()) {
+			bamFile->sample.assign(line);
+		} else
+		{
+			bamFile->sample.assign(*(bamFile->samples.begin()));
+		}
 		this->bams.push_back(bamFile);
 		}
 	bamin.close();
@@ -720,32 +649,7 @@ int X11BamCov::doWork(int argc,char** argv) {
 		}
 
 	//
-	this->display = ::XOpenDisplay(NULL);
-	if (this->display == NULL) {
-	   cerr<<  "[FAILURE] Cannot open display." << endl;
-	   return(EXIT_FAILURE);
-	   }
-
-	
-
-	 this->screen_number = DefaultScreen(this->display);
-
-	 this->palette = new Palette(this->display,  this->screen_number);
-
-	 this->screen = ::XScreenOfDisplay(this->display, this->screen_number);
-	 this->window = ::XCreateSimpleWindow(
-			 display,
-			 RootWindow(this->display,  this->screen_number),
-			 150, 150,
-			 screen->width-300,
-			 screen->height-300,
-			 1,
-	         BlackPixel(display,  this->screen_number),
-			 WhitePixel(display,  this->screen_number)
-			 );
-
-	::XSelectInput(display, window, ExposureMask | KeyPressMask);
-	::XMapWindow(display, window);
+	this->createWindow();
 	//main loop
 	XEvent evt;
 	bool done=false;
@@ -801,9 +705,7 @@ int X11BamCov::doWork(int argc,char** argv) {
 			resized();
 			}
 		}//end while
-
-	::XCloseDisplay(display);
-	display=NULL;
+	disposeWindow();
 	if(saveOut!=NULL)
 		{
 		fclose(saveOut);

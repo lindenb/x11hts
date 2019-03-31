@@ -25,15 +25,20 @@ THE SOFTWARE.
 #include <cstring>
 #include <cstdlib>
 #include <iostream>
+#include "version.hh"
 
 using namespace std;
 
 extern int main_cnv(int argc,char** argv);
+extern int main_browse(int argc,char** argv);
 
 static void usage(std::ostream& out) {
-out << "x11hts\nAuthor: Pierre Lindenbaum PhD.\nCompilation: " << __DATE__ << endl;
+out << "x11hts\nAuthor: Pierre Lindenbaum PhD.\nVersion:\n" << X11HTS_VERSION
+		<< "\nCompilation: " << __DATE__ << endl;
 out << "Usage:" << endl;
 out << "    x11hts cnv [options]" << endl;
+out << "    x11hts browse [options]" << endl;
+
 out << endl;
 }
 
@@ -46,13 +51,16 @@ int main(int argc,char** argv) {
 		if(strcmp(argv[1],"cnv")==0) {
 			return main_cnv(argc-1,&argv[1]);
 			}
+		else if(strcmp(argv[1],"browse")==0) {
+			return main_browse(argc-1,&argv[1]);
+			}
 		else
 			{
 			cerr << "unknown command \""<< argv[1] << "\"." << endl;
 			return EXIT_FAILURE;
 			}
 		}
-	catch(std::exception err)
+	catch(std::exception& err)
 		{
 		cerr << "[FATAL] An error occured \""<< err.what() << "\"." << endl;
 		return EXIT_FAILURE;
