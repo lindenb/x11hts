@@ -99,12 +99,22 @@ void X11Browser::paint() {
 	double dy=10;
 	for(size_t y_row=0;y_row< rows.size() && y< this->window_height ;++y_row) {
 		vector<PairOrReads*>* row=rows[y_row];
+		double midy=y+dy/2.0;
 		for(size_t por_idx=0;por_idx<row->size();++por_idx) {
 			PairOrReads* por = row->at(por_idx);
+			::XDrawLine(display,window,gc,
+				(int)pos2->
+				(int)midy
+				(int),
+				(int)midy
+				);
+			for(int side=0;side<2;++side) {
+
+			}
 		}
 		y+=dy;
 	}
-	XFlush(display);
+	::XFlush(display);
 }
 void X11Browser::repaint() {
 	for(size_t i=0;i< rows.size();++i){
