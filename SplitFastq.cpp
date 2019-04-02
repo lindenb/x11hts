@@ -28,78 +28,28 @@ THE SOFTWARE.
 #include <zlib.h>
 #include <cstdlib>
 #include <cstdio>
-#include <cerrno>
-#include <cstring>
 #include <unistd.h>
 #include <getopt.h>
 #include <cassert>
+#include "GZipInputStreamBuf.hh"
 
 using namespace std;
 
 #define PATTERN "__SPLIT__"
 
-#define BUFFER_SIZE 4096
-
-
-class GzipStreamBuf : public std::basic_streambuf<char>
+class Chunck
 	{
-	private:
-		char* buffer;
-		gzFile gzin;
 	public:
-		GzipStreamBuf(const char* fname)
-			{
-			this->gzin = ::gzopen(fname,"r");
-			if(this->gzin == Z_NULL)
-				{
-				cerr << "Cannot open file: " << fname <<  " "<< strerror(errno) << std::endl;
-				exit(EXIT_FAILURE);
-				}
-
-			this->buffer=new char[BUFFER_SIZE];
-
-			setg(	(char*)&this->buffer[0],
-				(char*)&this->buffer[BUFFER_SIZE],
-				(char*)&this->buffer[BUFFER_SIZE]
-				);
-			}
-
-		virtual ~GzipStreamBuf()
-			{
-			if(gzin!=NULL) ::gzclose(this->gzin);
-			if(this->buffer!=NULL) delete [] this->buffer;
-			}
-
-		virtual int underflow ( )
-			{
-			int nRead =0;
-			if(gzeof(this->gzin)) return EOF;
-
-			if( ( nRead = ::gzread(this->gzin,this->buffer,BUFFER_SIZE) ) <= 0 ) {
-				int ret = 0;
-				const char* msg = ::gzerror(this->gzin,&ret);
-				if(ret!=0) {
-				    cerr << "gz error " << msg << endl;
-				    exit(EXIT_FAILURE);
-				    }
-				return EOF;
-				}
-
-			setg(	(char*)&this->buffer[0],
-				(char*)&this->buffer[0],
-				(char*)&this->buffer[nRead]
-				);
-
-			return this->buffer[0];
-			}
-	    };
-
+		string filename;
+		gzFile out;
+		unsigned long count;
+	};
 
 class SplitFastq
     {
     public:
-	void usage(std::ostream& out);
-	int doWork(int argc,char** argv);
+		void usage(std::ostream& out);
+		int doWork(int argc,char** argv);
     };
 
 void SplitFastq::usage(std::ostream& out) {
@@ -155,67 +105,68 @@ int SplitFastq::doWork(int argc,char** argv) {
 	    cerr << "Illegal number of arguments." << endl;
 	    return EXIT_FAILURE;
 	    }
-   GzipStreamBuf gzbuf(argv[optind]);
+   GzipInputStreamBuf gzbuf(argv[optind]);
 
 
-   vector<gzFile> gzouts;
-   vector<unsigned long> counts;
-   vector<string> filenames;
+   vector<Chunck*> chunks;
    for(int i=0;i< nsplits;i++)
        {
-       string filename(file_out);
+       Chunck* chunk = new Chunck;
+       chunk->filename.assign(file_out);
+       chunk->out = NULL;
+       chunk->count = 0UL;
+       
        string::size_type p;
        char tmp[10];
        snprintf(tmp,10,"%04d",(i+1));
-       while((p=filename.find(PATTERN))!=string::npos) {
-	    filename.replace(p,strlen(PATTERN),tmp);
-	   }
-       counts.push_back(0UL);
-       filenames.push_back(filename);
+       while((p=chunk->filename.find(PATTERN))!=string::npos) {
+	    chunk->filename.replace(p,strlen(PATTERN),tmp);
+	   	}
+       chunks.push_back(chunk);
+       
+
        if(force==0) {
-	   FILE* f=fopen(filename.c_str(),"rb");
+	   FILE* f=fopen(chunk->filename.c_str(),"rb");
 	   if(f!=0) {
 	       fclose(f);
-	       cerr << "file " << filename << " already exists. Use -f to force" << endl;
-	       return EXIT_FAILURE;
+	       FATAL(fchunk->filename << " already exists. Use -f to force");
 	       }
 	   }
        }
-   for(size_t i=0;i< filenames.size();i++) {
-       gzFile gzout = gzopen(filenames[i].c_str(),"wb9");
+   for(size_t i=0;i< chunks.size();i++) {
+       chunks[i]->out = gzopen(chunks[i]->filename.c_str(),"wb9");
        if(gzout==Z_NULL) {
-            cerr << "Cannot write " << filenames[i] << " " << strerror(errno) << endl;
+            cerr << "Cannot write " << chunks[i]->filename << " " << strerror(errno) << endl;
             return EXIT_FAILURE;
             }
-       gzouts.push_back(gzout);
        }
    int nline=0;
    int file_idx = 0;
    string line;
    istream in(&gzbuf);
-   gzFile gzout=gzouts[file_idx];
+   Chunck* chunk = chunks[file_idx];
    while(getline(in,line,'\n'))
        {
-       gzwrite(gzout,(void*)line.c_str(), line.size());
-       gzputc(gzout,'\n');
+       gzwrite(chunk->out,(void*)line.c_str(), line.size());
+       gzputc(chunk->out,'\n');
        nline++;
        if(nline==4) {
-	   counts[file_idx]++;
-	   nline=0;
-	   file_idx++;
-	   if(file_idx==nsplits) file_idx=0;
-	   gzout=gzouts[file_idx];
-	   }
+		   chunk->count++;
+		   nline=0;
+		   file_idx++;
+		   if(file_idx==nsplits) file_idx=0;
+		   chunk=chunk[file_idx];
+	   	   }
        }
    if(nline!=0) {
        cerr << "Illegal number of reads  in input !" << endl;
        return EXIT_FAILURE;
    }
 
-   for(size_t i=0;i< gzouts.size();i++) {
-       gzflush(gzouts[i],Z_FULL_FLUSH);
-       gzclose(gzouts[i]);
-       cout << filenames[i] << "\t" << counts[i] << endl;
+   for(size_t i=0;i< chunks.size();i++) {
+       gzflush(chunks[i]->out,Z_FULL_FLUSH);
+       gzclose(chunks[i]->out);
+       cout << chunks[i]->filename << "\t" << chunks[i]->count << endl;
        }
    return 0;
    }

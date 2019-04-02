@@ -26,6 +26,9 @@ X11Launcher.o : X11Launcher.cpp X11Launcher.hh macros.hh
 SAMRecord.o : SAMRecord.cpp SAMRecord.hh macros.hh
 	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
 
+GZipInputStreamBuf.o : GZipInputStreamBuf.cpp GZipInputStreamBuf.hh
+	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
+
 macros.hh: version.hh
 
 version.hh : 
