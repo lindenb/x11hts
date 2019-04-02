@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include <unistd.h>
 #include <getopt.h>
 #include <cassert>
+#include "macros.hh"
 #include "GZipInputStreamBuf.hh"
 
 using namespace std;
@@ -126,16 +127,16 @@ int SplitFastq::doWork(int argc,char** argv) {
        
 
        if(force==0) {
-	   FILE* f=fopen(chunk->filename.c_str(),"rb");
-	   if(f!=0) {
-	       fclose(f);
-	       FATAL(fchunk->filename << " already exists. Use -f to force");
-	       }
-	   }
+		   FILE* f=fopen(chunk->filename.c_str(),"rb");
+		   if(f!=0) {
+			   fclose(f);
+			   FATAL("File '" << chunk->filename << "' already exists. Use -f to force.");
+			   }
+		   }
        }
    for(size_t i=0;i< chunks.size();i++) {
        chunks[i]->out = gzopen(chunks[i]->filename.c_str(),"wb9");
-       if(gzout==Z_NULL) {
+       if(chunks[i]->out==Z_NULL) {
             cerr << "Cannot write " << chunks[i]->filename << " " << strerror(errno) << endl;
             return EXIT_FAILURE;
             }
@@ -155,7 +156,7 @@ int SplitFastq::doWork(int argc,char** argv) {
 		   nline=0;
 		   file_idx++;
 		   if(file_idx==nsplits) file_idx=0;
-		   chunk=chunk[file_idx];
+		   chunk=chunks[file_idx];
 	   	   }
        }
    if(nline!=0) {

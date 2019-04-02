@@ -26,7 +26,22 @@ X11Launcher.o : X11Launcher.cpp X11Launcher.hh macros.hh
 SAMRecord.o : SAMRecord.cpp SAMRecord.hh macros.hh
 	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
 
+splitfastq: SplitFastq.o GZipInputStreamBuf.o
+	g++ -o $@  $(CFLAGS) $^ -lz
+
+interleavedfastq: InterleavedFastq.o GZipInputStreamBuf.o AbstractCmdLine.o
+	g++ -o $@  $(CFLAGS) $^ -lz
+
+InterleavedFastq.o: InterleavedFastq.cpp AbstractCmdLine.o
+	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $<
+
+SplitFastq.o : SplitFastq.cpp
+	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
+
 GZipInputStreamBuf.o : GZipInputStreamBuf.cpp GZipInputStreamBuf.hh
+	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
+
+AbstractCmdLine.o: AbstractCmdLine.cpp AbstractCmdLine.hh
 	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
 
 macros.hh: version.hh
