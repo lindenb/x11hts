@@ -44,14 +44,25 @@ using namespace std;
 class InterleavedFastq:public AbstractCmd
     {
     public:
-		InterleavedFastq() {
-			AbstractCmd::options.push_back(new Option('m',true,"modulo"));
-			AbstractCmd::options.push_back(new Option('d',true,"divider"));
-			}
-		virtual ~InterleavedFastq() {}
-		virtual int doWork(int argc,char** argv);
+	    InterleavedFastq();
+	    virtual ~InterleavedFastq();
+	    virtual int doWork(int argc,char** argv);
     };
 
+InterleavedFastq::InterleavedFastq() {
+    app_desc.assign("Generate a intervleaved fastq output by printing the fastq record of an input of fastq 'modulo' every 'd' record");
+
+    Option* opt = new Option('m',true,"modulo. Print the fastq if num-fastq%dividuer == modulo");
+    opt->arg("integer")->required();
+    options.push_back(opt);
+    opt = new Option('d',true,"divider");
+    opt->arg("integer")->required();
+    options.push_back(opt);
+    }
+
+InterleavedFastq::~InterleavedFastq() {
+
+}
 
 int InterleavedFastq::doWork(int argc,char** argv) {
     int opt;
@@ -129,13 +140,13 @@ int InterleavedFastq::doWork(int argc,char** argv) {
     	return EXIT_FAILURE;
     	}
      if(nline!=0) {
-       cerr << "Illegal number of reads  in input !" << endl;
-       return EXIT_FAILURE;
+	       cerr << "Illegal number of reads  in input !" << endl;
+	       return EXIT_FAILURE;
    		}
 	return 0;
-  	}
+	}
   	 	
-int main(int argc,char** argv)
+int main_interleavedfastq(int argc,char** argv)
     {
     InterleavedFastq app;
     return app.doWork(argc,argv);

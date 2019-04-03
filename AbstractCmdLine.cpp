@@ -1,12 +1,61 @@
+/*
+The MIT License (MIT)
+
+Copyright (c) 2019 Pierre Lindenbaum PhD.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*/
+#include <cctype>
+#include "version.hh"
+#include "macros.hh"
 #include "AbstractCmdLine.hh"
 
 using namespace std;
 
-Option::Option(char opt,bool has_argument,const char* description):opt(opt),has_argument(has_argument),description(description)
+Option::Option(int opt,bool has_argument,const char* description):
+	opt(opt),
+	has_argument(has_argument),
+	description(description),
+	_arg_name(has_argument?"arg":""),
+	_long_opt(""),
+	_hidden(false),
+	_required(false)
 	{
 	}
 
-AbstractCmd::AbstractCmd() {
+Option* Option::arg(const char* s) {
+    _arg_name.assign(s);
+    return this;
+    }
+
+Option* Option::hidden() {
+    _hidden= true;
+    return this;
+    }
+Option* Option::required() {
+    _required= true;
+    return this;
+    }
+
+
+AbstractCmd::AbstractCmd():app_name("application"),app_version(X11HTS_VERSION) {
 	options.push_back(new Option('h',false,"print help"));
 	options.push_back(new Option('v',false,"print version"));
 	}
@@ -16,15 +65,28 @@ AbstractCmd::~AbstractCmd()
 	}
 
 
-void AbstractCmd::usage1(std::ostream& out) {
+void AbstractCmd::usage_options(std::ostream& out) {
 	for(auto opt:options) {
-		out << " -" << opt->opt;
-		if(opt->has_argument) out << " (arg)";
-		out << " " << opt->description << endl; 
+		if(opt->_hidden) continue;
+		out << " ";
+		if(isprint(opt->opt)) {
+		    out << "-" << (char)opt->opt;
+		    }
+		if(opt->has_argument) out << " (" << opt->_arg_name << ")";
+		out << " " << opt->description ;
+		if(opt->_required) out << " [REQUIRED]";
+		out << endl;
 		}
 	}
-void AbstractCmd::usage(std::ostream& out)	{
-	usage1(out);
+void AbstractCmd::usage(std::ostream& out) {
+	out << app_name << endl;
+	out << "Version: " << app_version << endl;
+	out << "Compilation: " << __DATE__ << " at " __TIME__ << endl;
+	out << app_desc << endl;
+
+	out << "## Options" << endl << endl;
+	usage_options(out);
+	out << endl;
 	}
 	
 int AbstractCmd::doWork(int argc,char** argv) {
@@ -42,3 +104,9 @@ std::string AbstractCmd::build_getopt_str() {
 	return s;
 	}
 
+Option* AbstractCmd::find_opt_by_opt(int c) {
+    for(auto opt:options) {
+	if(opt->opt == c) return opt;
+	}
+    FATAL("Illegal state: cannot find option -"<< (char)c);
+    }

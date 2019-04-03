@@ -27,10 +27,6 @@ void X11Launcher::resized() {
 		}
 	}
 
-void X11Launcher::usage(std::ostream& out) {
-	}
-
-
 void X11Launcher::createWindow() {
 	//
 	this->display = ::XOpenDisplay(NULL);

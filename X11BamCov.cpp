@@ -135,21 +135,21 @@ public:
 
 class X11BamCov: public X11Launcher
 	{
-public:
-	std::vector<BamW*> bams;
-	std::vector<ChromStartEnd*> regions;
-	size_t region_idx;
-	float extend_factor;
-	int num_columns;
-	int cap_depth;
-	bool show_sample_name;
-	int smooth_factor;
-	X11BamCov();
-	~X11BamCov();
-	int doWork(int argc,char** argv);
-	void repaint();
-	void paint();
-	void usage(std::ostream& out);
+    public:
+	    std::vector<BamW*> bams;
+	    std::vector<ChromStartEnd*> regions;
+	    size_t region_idx;
+	    float extend_factor;
+	    int num_columns;
+	    int cap_depth;
+	    bool show_sample_name;
+	    int smooth_factor;
+	    X11BamCov();
+	    virtual ~X11BamCov();
+	    virtual int doWork(int argc,char** argv);
+	    virtual void repaint();
+	    virtual void paint();
+	    virtual void usage(std::ostream& out);
 	};
 
 
@@ -158,7 +158,7 @@ class X11BamCovFileFactory: public SAMFileFactory
 public:
 	X11BamCov* owner;
 	X11BamCovFileFactory(X11BamCov* owner);
-	virtual X11BamCovFileFactory();
+	virtual ~X11BamCovFileFactory();
 	virtual SAMFile* createInstance();
 	};
 
@@ -178,6 +178,9 @@ class BamW : public SAMFile
 
 X11BamCovFileFactory::X11BamCovFileFactory(X11BamCov* owner):owner(owner){
 }
+X11BamCovFileFactory::~X11BamCovFileFactory(){
+
+}
 
 SAMFile* X11BamCovFileFactory::createInstance() {
 	BamW* instance= new BamW(this->owner);
@@ -191,7 +194,7 @@ BamW::~BamW() {
 	}
 
 
-X11BamCov::X11BamCov():palette(0),show_sample_name(true),smooth_factor(20) {
+X11BamCov::X11BamCov():show_sample_name(true),smooth_factor(20) {
 	region_idx = 0UL;
 	window_width = 0;
 	window_height = 0;

@@ -3,12 +3,12 @@ LIBS= -lX11 -lm -lpthread -lhts -lz -llzma -lbz2
 LDFLAGS=-L/usr/X11R6/lib -L$(HTSLIB)
 INCLUDES=-I$(HTSLIB)
 CFLAGS=-Wall -std=c++11 -g
-CC?=g++
+CC=g++
 
 ifeq ($(realpath $(HTSLIB)/htslib/sam.h),)
 $(error cannot find $(HTSLIB)/htslib/sam.h. Please define HTSLIB when invoking make. Something like `make HTSLIB=../htslib`)
 endif
-x11hts : $(addsuffix .o,X11Hts X11BamCov X11Launcher SAMRecord SAMFile)
+x11hts : $(addsuffix .o,X11Hts X11BamCov X11Launcher SAMRecord SAMFile AbstractCmdLine Utils SplitFastq GZipInputStreamBuf InterleavedFastq)
 	$(CC) -o $@ $(CFLAGS) $(INCLUDES) $(LDFLAGS) $^ $(LIBS)
 
 X11Hts.o : X11Hts.cpp  macros.hh
@@ -26,12 +26,6 @@ X11Launcher.o : X11Launcher.cpp X11Launcher.hh macros.hh
 SAMRecord.o : SAMRecord.cpp SAMRecord.hh macros.hh
 	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
 
-splitfastq: SplitFastq.o GZipInputStreamBuf.o
-	g++ -o $@  $(CFLAGS) $^ -lz
-
-interleavedfastq: InterleavedFastq.o GZipInputStreamBuf.o AbstractCmdLine.o
-	g++ -o $@  $(CFLAGS) $^ -lz
-
 InterleavedFastq.o: InterleavedFastq.cpp AbstractCmdLine.o
 	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $<
 
@@ -42,6 +36,9 @@ GZipInputStreamBuf.o : GZipInputStreamBuf.cpp GZipInputStreamBuf.hh
 	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
 
 AbstractCmdLine.o: AbstractCmdLine.cpp AbstractCmdLine.hh
+	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
+
+Utils.o: Utils.cpp Utils.hh
 	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
 
 macros.hh: version.hh

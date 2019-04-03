@@ -4,10 +4,11 @@
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <X11/Xutil.h>
+#include "AbstractCmdLine.hh"
 #include "Palette.hh"
 #include "Hershey.hh"
 
-class X11Launcher
+class X11Launcher:public AbstractCmd
 	{
 	public:
 		Display *display;
@@ -24,7 +25,6 @@ class X11Launcher
 		virtual ~X11Launcher();
 		virtual void resized();
 		virtual void repaint()=0;
-		virtual void usage(std::ostream& out);
 		virtual void createWindow();
 		virtual void disposeWindow();
 	};

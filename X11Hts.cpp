@@ -25,24 +25,43 @@ THE SOFTWARE.
 #include <cstring>
 #include <cstdlib>
 #include <iostream>
-#include "version.hh"
+#include "AbstractCmdLine.hh"
 
 using namespace std;
 
-extern int main_cnv(int argc,char** argv);
-extern int main_browse(int argc,char** argv);
+class X11Hts : public AbstractCmd
+    {
+    public:
+	X11Hts();
+	virtual ~X11Hts();
+	virtual void usage(std::ostream& out);
+	virtual int doWork(int argc,char** argv);
+    };
 
-static void usage(std::ostream& out) {
-out << "x11hts\nAuthor: Pierre Lindenbaum PhD.\nVersion:\n" << X11HTS_VERSION
-		<< "\nCompilation: " << __DATE__ << endl;
+extern int main_cnv(int argc,char** argv);
+//extern int main_browse(int argc,char** argv);
+extern int main_splitfastq(int argc,char** argv);
+extern int main_interleavedfastq(int argc,char** argv);
+
+X11Hts::X11Hts() {
+    app_name="x11hts";
+}
+X11Hts::~X11Hts() {
+}
+
+void X11Hts::usage(std::ostream& out) {
+AbstractCmd::usage(out);
+
 out << "Usage:" << endl;
-out << "    x11hts cnv [options]" << endl;
-out << "    x11hts browse [options]" << endl;
+out << "    "<< app_name << " cnv [options]" << endl;
+out << "    "<< app_name << " browse [options]" << endl;
+out << "    "<< app_name << " splitfastq [options]" << endl;
+out << "    "<< app_name << " interleavedfastq [options]" << endl;
 
 out << endl;
 }
 
-int main(int argc,char** argv) {
+int X11Hts::doWork(int argc,char** argv) {
 	if(argc<2) {
 		usage(cerr);
 		return EXIT_FAILURE;
@@ -51,9 +70,9 @@ int main(int argc,char** argv) {
 		if(strcmp(argv[1],"cnv")==0) {
 			return main_cnv(argc-1,&argv[1]);
 			}
-		else if(strcmp(argv[1],"browse")==0) {
-			return main_browse(argc-1,&argv[1]);
-			}
+		//else if(strcmp(argv[1],"browse")==0) { return main_browse(argc-1,&argv[1]);}
+		else if(strcmp(argv[1],"splitfastq")==0) { return main_splitfastq(argc-1,&argv[1]);}
+		else if(strcmp(argv[1],"interleavedfastq")==0) { return main_interleavedfastq(argc-1,&argv[1]);}
 		else
 			{
 			cerr << "unknown command \""<< argv[1] << "\"." << endl;
@@ -71,3 +90,8 @@ int main(int argc,char** argv) {
 		return EXIT_FAILURE;
 		}
 	}
+
+int main(int argc,char** argv) {
+    X11Hts app;
+    return app.doWork(argc, argv);
+}

@@ -32,30 +32,47 @@ THE SOFTWARE.
 #include <getopt.h>
 #include <cassert>
 #include "macros.hh"
+#include "Utils.hh"
+#include "AbstractCmdLine.hh"
 #include "GZipInputStreamBuf.hh"
 
 using namespace std;
 
 #define PATTERN "__SPLIT__"
 
-class Chunck
-	{
-	public:
-		string filename;
-		gzFile out;
-		unsigned long count;
-	};
 
-class SplitFastq
+class SplitFastq: public AbstractCmd
     {
+    private:
+	class Chunck
+		{
+		public:
+			string filename;
+			gzFile out;
+			unsigned long count;
+		};
+
+
     public:
-		void usage(std::ostream& out);
-		int doWork(int argc,char** argv);
+		SplitFastq();
+		virtual ~SplitFastq();
+		virtual int doWork(int argc,char** argv);
     };
 
-void SplitFastq::usage(std::ostream& out) {
-    out << "-n number of splits" << endl;
-    out << "-o (fileout) must end with .gz and contains " << PATTERN << endl;
+SplitFastq::SplitFastq() {
+    app_name="splitfastq";
+    app_desc.assign("dispatch reads from fastq files into 'n' chunks of fastqs.");
+    Option* opt = new Option('n',true,"number of fastq parts to be generated.");
+    opt->arg("int")->required();
+    options.push_back(opt);
+    opt= new Option('o',true,"output file pattern. Must contain \"" PATTERN "\". Must end with '.gz'.");
+    opt->arg("file")->required();
+    options.push_back(opt);
+    opt= new Option('f',false,"force existing file to be overwritten");
+    options.push_back(opt);
+    }
+
+SplitFastq::~SplitFastq() {
 }
 
 int SplitFastq::doWork(int argc,char** argv) {
@@ -63,13 +80,15 @@ int SplitFastq::doWork(int argc,char** argv) {
     int force=0;
     char* file_out = NULL;
     int nsplits=0;
-    while ((opt = getopt(argc, argv, "hn:fo:")) != -1) {
+    std::string optstr = this->build_getopt_str();
+
+    while ((opt = getopt(argc, argv, optstr.c_str())) != -1) {
 	    switch (opt) {
 	    case 'h':
 		    usage(cout);
 		    return 0;
 	    case 'n':
-		    nsplits =atoi(optarg);
+		    nsplits = Utils::parseInt(optarg);
 		    break;
 	    case 'o':
 		    file_out = optarg;
@@ -88,7 +107,7 @@ int SplitFastq::doWork(int argc,char** argv) {
     if(nsplits<=0)  {
 	cerr << "Bad value for nsplit :" << nsplits << endl;
 	return EXIT_FAILURE;
-    }
+	}
     if(file_out==NULL)  {
    	cerr << "No output defined."<< endl;
    	return EXIT_FAILURE;
@@ -97,7 +116,7 @@ int SplitFastq::doWork(int argc,char** argv) {
       	cerr << "output file " << file_out << " must contain " << PATTERN << endl;
       	return EXIT_FAILURE;
         }
-    if(strlen(file_out)<3 || strcmp(&file_out[strlen(file_out)-3],".gz")!=0)  {
+    if(!Utils::endsWith(file_out,".gz"))  {
 	cerr << "output file " << file_out << " must end with  .gz" << endl;
 	return EXIT_FAILURE;
         }
@@ -168,11 +187,12 @@ int SplitFastq::doWork(int argc,char** argv) {
        gzflush(chunks[i]->out,Z_FULL_FLUSH);
        gzclose(chunks[i]->out);
        cout << chunks[i]->filename << "\t" << chunks[i]->count << endl;
+       delete chunks[i];
        }
-   return 0;
+   return EXIT_SUCCESS;
    }
 
-int main(int argc,char** argv)
+int main_splitfastq(int argc,char** argv)
     {
     SplitFastq app;
     return app.doWork(argc,argv);
