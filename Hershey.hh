@@ -33,6 +33,8 @@ THE SOFTWARE.
 #include <sstream>
 #include "config.h"
 #include <X11/Xlib.h>
+#include "Graphics.hh"
+#include "Utils.hh"
 
 using namespace std;
 
@@ -177,19 +179,14 @@ class Hershey
 	
 	public:	
 	
-	
-		
-
-		void paint(
-			Display* display,
-			Window win,
-			GC gc,
+		    void paint(
+			Graphics* g,
 			const char* s,
 			double x, double y,
 			double width, double height
 			)
 			{
-			if(s==NULL || width==0 || height==0) return;
+			if(Utils::isBlank(s) || width==0 || height==0) return;
 			size_t s_length=strlen(s);
 			if(s_length==0) return;
 			double x1=0;
@@ -204,10 +201,10 @@ class Hershey
 					Operator&  p2= array[n];
 					double x2= x+ (p2.x/this->scalex)*dx + dx*i +dx/2.0;
 					double y2= y+ (p2.y/this->scaley)*height +height/2.0 ;
-			
+
 					if(p2.op == LINETO)
 						{
-						::XDrawLine(display, win, gc, (int)x1, (int)y1,(int)x2, (int)y2);
+						g->drawLine(x1, y1, x2, y2);
 						x1=x2;
 						y1=y2;
 						}
@@ -217,8 +214,22 @@ class Hershey
 						y1=y2;
 						}
 					}
+
+				}
+			}
 		
-				}	
+
+		void paint(
+			Display* display,
+			Window win,
+			GC gc,
+			const char* s,
+			double x, double y,
+			double width, double height
+			)
+			{
+			Graphics g(display,win);
+			paint(&g,s,x,y,width,height);
 			}
 		
 	};

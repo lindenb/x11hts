@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include <cassert>
 #include "macros.hh"
 #include "AbstractCmdLine.hh"
+#include "Utils.hh"
 #include "GZipInputStreamBuf.hh"
 
 using namespace std;
@@ -66,19 +67,19 @@ InterleavedFastq::~InterleavedFastq() {
 
 int InterleavedFastq::doWork(int argc,char** argv) {
     int opt;
-    int modulo=0;
+    int modulo=-1;
     int divider =0;
     string optstr = this->build_getopt_str();
-    while ((opt = getopt(argc, argv, optstr.c_str())) != -1) {
+    while ((opt = ::getopt(argc, argv, optstr.c_str())) != -1) {
 	    switch (opt) {
 	    case 'h':
 		    usage(cout);
 		    return 0;
 	    case 'm':
-		    modulo =atoi(optarg);
+		    modulo = Utils::parseInt(optarg);
 		    break;
 		case 'd':
-		    divider =atoi(optarg);
+		    divider = Utils::parseInt(optarg);
 		    break;
 	    case '?':
 		    cerr << "unknown option -"<< (char)optopt << endl;
@@ -91,21 +92,26 @@ int InterleavedFastq::doWork(int argc,char** argv) {
     if(modulo<0)  {
 	cerr << "Bad value for modulo :" << modulo << endl;
 	return EXIT_FAILURE;
-    }
+	}
     if(divider<=0)  {
 		cerr << "Bad value for divider :" << divider << endl;
 		return EXIT_FAILURE;
 		}
-	if(modulo>=divider)  {
-		cerr << "modulo>=divider" << endl;
-		return EXIT_FAILURE;
-		}
+    if(modulo>=divider)  {
+	    cerr << "Bad arguments : modulo>=divider" << endl;
+	    return EXIT_FAILURE;
+	    }
     string line;
     int nline = 0;
     long nReads  = 0;
-    if(optind+1==argc) {
-	    GzipInputStreamBuf gzbuf(argv[optind]);
-	    istream in(&gzbuf);
+    if(optind==argc || optind+1==argc) {
+	    //single end
+	    GzipInputStreamBuf* gzbuf=
+		    (optind==argc?
+		       new GzipInputStreamBuf(fileno(stdin)):
+		       new GzipInputStreamBuf(argv[optind])
+		     );
+	    istream in(gzbuf);
 	    while(getline(in,line,'\n')) {
 	     if(nReads%divider==modulo) cout << line << endl;
 	     nline++;
@@ -114,8 +120,10 @@ int InterleavedFastq::doWork(int argc,char** argv) {
 		   nReads++;
 	   	   }
 	     }
+	    delete gzbuf;
 	  }
 	else if(optind+2==argc) {
+	    //paired end
 	    int side=0;
 	    GzipInputStreamBuf gzbuf1(argv[optind]);
 	    GzipInputStreamBuf gzbuf2(argv[optind+1]);
@@ -140,11 +148,11 @@ int InterleavedFastq::doWork(int argc,char** argv) {
     	return EXIT_FAILURE;
     	}
      if(nline!=0) {
-	       cerr << "Illegal number of reads  in input !" << endl;
-	       return EXIT_FAILURE;
-   		}
-	return 0;
-	}
+	   cerr << "Illegal number of reads  in input !" << endl;
+	   return EXIT_FAILURE;
+	   }
+    return EXIT_SUCCESS;
+    }
   	 	
 int main_interleavedfastq(int argc,char** argv)
     {

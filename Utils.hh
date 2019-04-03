@@ -33,13 +33,20 @@ THE SOFTWARE.
 
 class Utils {
     public:
+
+	static std::string& normalize_space(std::string& line);
+	static std::string& tr(std::string& line, const char* set,char c2);
+	static std::string& trs(std::string& line,char c2);
+
 	static bool isBlank(const std::string& line);
+	static bool isBlank(const char* s);
 	static bool startsWith(const std::string& line,const char* prefix);
 	static bool endsWith(const std::string& line,const char* suffix);
 	static std::string& trim(std::string& line);
 	static int parseInt(const char* s);
 	static std::string niceInt(int i);
 	static std::size_t split(char delim,std::string line,std::vector<std::string>& tokens);
+	static std::size_t split(char delim,std::string line,std::vector<std::string>& tokens,std::size_t limit);
 	static std::string join(const char* delim,const std::vector<std::string>& tokens);
 };
 

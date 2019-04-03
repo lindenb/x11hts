@@ -31,27 +31,42 @@ using namespace std;
 
 #define BUFFER_SIZE 4096
 
-GzipInputStreamBuf::GzipInputStreamBuf(const char* fname)
+
+void GzipInputStreamBuf::init_buffer(std::size_t n) {
+this->buffer_size= n;
+this->buffer=new char[this->buffer_size];
+this->setg(
+    (char*)&this->buffer[0],
+    (char*)&this->buffer[this->buffer_size],
+    (char*)&this->buffer[this->buffer_size]
+    );
+}
+
+GzipInputStreamBuf::GzipInputStreamBuf(const char* fname):buffer_size(0UL),buffer(0),gzin(0)
 	{
 	ASSERT_NOT_NULL(fname);
 	this->gzin = ::gzopen(fname,"r");
 	if(this->gzin == Z_NULL)
-		{
-		FATAL("Cannot open file: " << fname <<  " "<< strerror(errno));
-		}
+	    {
+	    FATAL("Cannot open file: " << fname <<  " "<< strerror(errno));
+	    }
+	init_buffer(BUFFER_SIZE);
+	}
 
-	this->buffer=new char[BUFFER_SIZE];
-
-	setg(	(char*)&this->buffer[0],
-		(char*)&this->buffer[BUFFER_SIZE],
-		(char*)&this->buffer[BUFFER_SIZE]
-		);
+GzipInputStreamBuf::GzipInputStreamBuf(int fd):buffer_size(BUFFER_SIZE),buffer(0),gzin(0)
+	{
+	this->gzin = ::gzdopen(fd, "r");
+	if(this->gzin == Z_NULL)
+	    {
+	    FATAL("Cannot open file descriptor: " << fd <<  " "<< strerror(errno));
+	    }
+	init_buffer(BUFFER_SIZE);
 	}
 
 GzipInputStreamBuf::~GzipInputStreamBuf()
 	{
-	::gzclose(this->gzin);
-	delete [] this->buffer;
+	if(this->gzin!=Z_NULL) ::gzclose(this->gzin);
+	if(this->buffer!=0) delete [] this->buffer;
 	}
 
 int GzipInputStreamBuf::underflow ( )
@@ -59,7 +74,7 @@ int GzipInputStreamBuf::underflow ( )
 	int nRead =0;
 	if(gzeof(this->gzin)) return EOF;
 
-	if( ( nRead = ::gzread(this->gzin,this->buffer,BUFFER_SIZE) ) <= 0 ) {
+	if( ( nRead = ::gzread(this->gzin,this->buffer,this->buffer_size) ) <= 0 ) {
 		int ret = 0;
 		const char* msg = ::gzerror(this->gzin,&ret);
 		if(ret!=0) FATAL("gz error " << msg);

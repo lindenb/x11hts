@@ -39,7 +39,7 @@ class X11Hts : public AbstractCmd
     };
 
 extern int main_cnv(int argc,char** argv);
-//extern int main_browse(int argc,char** argv);
+extern int main_browser(int argc,char** argv);
 extern int main_splitfastq(int argc,char** argv);
 extern int main_interleavedfastq(int argc,char** argv);
 
@@ -70,7 +70,7 @@ int X11Hts::doWork(int argc,char** argv) {
 		if(strcmp(argv[1],"cnv")==0) {
 			return main_cnv(argc-1,&argv[1]);
 			}
-		//else if(strcmp(argv[1],"browse")==0) { return main_browse(argc-1,&argv[1]);}
+		else if(strcmp(argv[1],"browse")==0) { return main_browser(argc-1,&argv[1]);}
 		else if(strcmp(argv[1],"splitfastq")==0) { return main_splitfastq(argc-1,&argv[1]);}
 		else if(strcmp(argv[1],"interleavedfastq")==0) { return main_interleavedfastq(argc-1,&argv[1]);}
 		else

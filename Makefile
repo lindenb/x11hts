@@ -1,5 +1,5 @@
 HTSLIB?=../htslib
-LIBS= -lX11 -lm -lpthread -lhts -lz -llzma -lbz2
+LIBS= -lX11 -lm -lpthread -lhts -lz -llzma -lbz2 -lm
 LDFLAGS=-L/usr/X11R6/lib -L$(HTSLIB)
 INCLUDES=-I$(HTSLIB)
 CFLAGS=-Wall -std=c++11 -g
@@ -8,7 +8,7 @@ CC=g++
 ifeq ($(realpath $(HTSLIB)/htslib/sam.h),)
 $(error cannot find $(HTSLIB)/htslib/sam.h. Please define HTSLIB when invoking make. Something like `make HTSLIB=../htslib`)
 endif
-x11hts : $(addsuffix .o,X11Hts X11BamCov X11Launcher SAMRecord SAMFile AbstractCmdLine Utils SplitFastq GZipInputStreamBuf InterleavedFastq)
+x11hts : $(addsuffix .o,X11Hts X11BamCov X11Launcher SAMRecord SAMFile AbstractCmdLine Utils SplitFastq GZipInputStreamBuf InterleavedFastq X11Browser Graphics BedLine)
 	$(CC) -o $@ $(CFLAGS) $(INCLUDES) $(LDFLAGS) $^ $(LIBS)
 
 X11Hts.o : X11Hts.cpp  macros.hh
@@ -41,6 +41,16 @@ AbstractCmdLine.o: AbstractCmdLine.cpp AbstractCmdLine.hh
 Utils.o: Utils.cpp Utils.hh
 	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
 
+X11Browser.o : X11Browser.cpp
+	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
+
+Graphics.o: Graphics.cpp Graphics.hh
+	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
+
+BedLine.o: BedLine.cpp BedLine.hh
+	$(CC) -o $@ -c $(CFLAGS) $(INCLUDES) $< 
+
+
 macros.hh: version.hh
 
 version.hh : 
@@ -50,6 +60,12 @@ version.hh :
 	-git rev-parse HEAD  | tr -d "\n"  >> $@
 	echo '"' >> $@
 	echo "#endif" >> $@
+
+test2: x11hts
+	find ${HOME}/src/jvarkit-git/src/test/resources/ -name "S*.bam" > jeter.bam.list
+	echo "RF03	1	10	POUM" > jeter.bed
+	echo "RF03	1	1000	POUM" >> jeter.bed
+	./x11hts browse -B jeter.bam.list  -R jeter.bed
 
 test: x11hts
 	find ${HOME}/src/jvarkit-git/src/test/resources/ -name "S*.bam" > jeter.bam.list

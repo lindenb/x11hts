@@ -38,14 +38,54 @@ while(!line.empty() && isspace(line[0])) {
 return line;
 }
 
+std::string& Utils::tr(std::string& line,const char* set,char c2) {
+    for(size_t i=0;i< line.size();i++) {
+    	if(strchr(set,line[i])!=NULL) line[i]=c2;
+	}
+    return line;
+    }
+std::string& Utils::trs(std::string& line,char c2)
+    {
+    size_t i=0;
+    while(i< line.size()) {
+       	if(line[i]==c2 && i+1 < line.size() && line[i+1]==c2)
+       	    {
+       	    line.erase(i,1);
+       	    }
+       	else
+       	    {
+       	    i++;
+       	    }
+   	}
+    return line;
+    }
+
+
+string& Utils::normalize_space(std::string& line) {
+    tr(line," \t\n\r",' ');
+    trs(line,' ');
+    trim(line);
+    return line;
+}
+
+bool Utils::isBlank(const char* s)
+    {
+    if(s==NULL) return true;
+    size_t i=0;
+    while(s[i]!=0) {
+	if(!isspace(s[i])) return false;
+	++i;
+	}
+    return true;
+    }
+
 
 bool Utils::isBlank(const std::string& line)
 {
-for(size_t i=0;i< line.size();i++) {
-	if(!isspace(line[i])) return false;
+return isBlank(line.c_str());
 }
-return true;
-}
+
+
 
 /** convert int to string with comma sep */
 string Utils::niceInt(int i) {
@@ -100,10 +140,26 @@ std::size_t Utils::split(char delim,std::string line,std::vector<std::string>& t
 	while(j>0 && line[j-1]==delim) j--;
 	for(size_t i=0;i< j;i++) {
 		if(line[i]==delim) {
-			tokens.push_back(line.substr(prev,prev-i));
+			tokens.push_back(line.substr(prev,i-prev));
 			prev=i+1;
 		}
 	}
-	tokens.push_back(line.substr(prev,prev-j));
+	tokens.push_back(line.substr(prev,j-prev));
+	return tokens.size();
+	}
+
+std::size_t Utils::split(char delim,std::string line,std::vector<std::string>& tokens,size_t limit) {
+	if(limit<1) FATAL("bad value for limit");
+	tokens.clear();
+	size_t prev=0;
+	size_t j=line.length();
+	while(j>0 && line[j-1]==delim) j--;
+	for(size_t i=0;i< j && tokens.size() +1 < limit ;i++) {
+		if(line[i]==delim) {
+			tokens.push_back(line.substr(prev,i-prev));
+			prev=i+1;
+		}
+	}
+	tokens.push_back(line.substr(prev,j-prev));
 	return tokens.size();
 	}

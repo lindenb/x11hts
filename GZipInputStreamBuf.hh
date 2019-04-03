@@ -41,10 +41,13 @@ THE SOFTWARE.
 class GzipInputStreamBuf : public std::basic_streambuf<char>
 	{
 	private:
+		std::size_t buffer_size;
 		char* buffer;
 		gzFile gzin;
+		void init_buffer(std::size_t n);
 	public:
 		GzipInputStreamBuf(const char* fname);
+		GzipInputStreamBuf(int);
 		virtual ~GzipInputStreamBuf();
 		virtual int underflow( );
 	};

@@ -44,6 +44,9 @@ class Cigar
 		Cigar(const bam1_t *b);
 		int size();
 		CigarElement& at(int i);
+		int getReferenceLength() const;
+		int getRightClipLength() const;
+		int getLeftClipLength() const;
 	};
 
 class SAMRecord
@@ -51,6 +54,7 @@ class SAMRecord
 	private:
 		bool _clone;
 		Cigar* _cigar;
+		int mAlignmentEnd;
 	public:
 		const bam_hdr_t *header;
 		bam1_t *b;
@@ -58,6 +62,7 @@ class SAMRecord
 		~SAMRecord();
 		bam1_core_t* cor();
 		const char* getReadName();
+		int getReadNameLength();
 		int getFlag();
 		bool hasFlag(int flg);
 		bool isPaired();
@@ -67,6 +72,7 @@ class SAMRecord
 		bool isMateReverseStrand();
 		bool isFirstInPair();
 		bool isSecondInPair();
+		bool isProperPair();
 		Cigar* getCigar();
 		int getReferenceIndex();
 		const char* getReferenceName();
@@ -74,6 +80,8 @@ class SAMRecord
 		const char* getMateReferenceName();
 		int getAlignmentStart();
 		int getAlignmentEnd();
+		int getUnclippedStart();
+		int getUnclippedEnd();
 		int getStart();
 		int getInferredSize();
 		int getReadLength();

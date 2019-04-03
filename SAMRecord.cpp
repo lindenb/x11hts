@@ -1,6 +1,8 @@
 #include "SAMRecord.hh"
 #include "macros.hh"
 
+#define NO_ALIGNMENT_START -1
+
 using namespace std;
 CigarOperator::CigarOperator(char op,bool consumeRead,bool consumeRef):op(op),consumeRead(consumeRead),consumeRef(consumeRef) {
 }
@@ -76,14 +78,52 @@ Cigar::Cigar(const bam1_t *b) {
 int Cigar::size() {
 	return elements.size();
 	}
-CigarElement& Cigar::at(int i)
-	{
-	return this->elements[i];
+
+int Cigar::getReferenceLength() const
+    {
+    int n=0;
+    for(auto ce:elements) {
+	if(ce.op->consumeRef) n+=ce.len;
 	}
+    return n;
+    }
+
+int Cigar::getRightClipLength() const
+    {
+    if(elements.empty()) return 0;
+    int n=0;
+    size_t i=elements.size()-1;
+    while(i>0 && elements[i].op->isClipping())
+	{
+	n+=elements[i].len;
+	i--;
+	}
+    return n;
+    }
+int Cigar::getLeftClipLength() const
+    {
+    int n=0;
+    for(size_t i=0; i< elements.size() && elements[i].op->isClipping();i++)
+   	{
+   	n+=elements[i].len;
+   	}
+    return n;
+    }
+
+
+CigarElement& Cigar::at(int i)
+    {
+    return this->elements[i];
+    }
 
 
 
-SAMRecord::SAMRecord(const bam_hdr_t *header, bam1_t *b,bool clone):_clone(clone),_cigar(0),header(header),b(0) {
+SAMRecord::SAMRecord(const bam_hdr_t *header, bam1_t *b,bool clone):
+	_clone(clone),
+	_cigar(0),
+	mAlignmentEnd(NO_ALIGNMENT_START),
+	header(header),b(0)
+	{
 	this->b= _clone ?  ::bam_dup1(b) : b;
 	}
 
@@ -123,6 +163,11 @@ bool SAMRecord::isFirstInPair() {
 bool SAMRecord::isSecondInPair() {
 	return hasFlag(BAM_FREAD2);
 	}
+
+bool SAMRecord::isProperPair() {
+	return hasFlag(BAM_FPROPER_PAIR);
+	}
+
 Cigar* SAMRecord::getCigar() {
 	if(isReadUnmapped()) return NULL;
 	if(_cigar==NULL) _cigar=new Cigar(b);
@@ -143,6 +188,7 @@ const char* SAMRecord::getMateReferenceName() {
 	return i<0 ? 0 : header->target_name[i];
 	}
 int SAMRecord::getAlignmentStart() {
+	if(isReadUnmapped()) return NO_ALIGNMENT_START;
 	return cor()->pos+1;
 	}
 int SAMRecord::getStart() {
@@ -156,6 +202,7 @@ int SAMRecord::getReadLength() {
 	}
 char SAMRecord::getBaseAt(int i)
 	{
+	if(i<0 || i>=getReadLength()) FATAL("index out of bound i="<<i<< " read len="<< getReadLength());
 	uint8_t *s = bam_get_seq(b);
 	return "=ACMGRSVTWYHKDBN"[bam_seqi(s, i)];
 	}
@@ -166,4 +213,31 @@ char SAMRecord::getQualAt(int i)
 	if (s[0] == 0xff) return '*';
 	return s[i] + 33;
 	}
+
+int SAMRecord::getAlignmentEnd() {
+       if (isReadUnmapped()) {
+            return NO_ALIGNMENT_START;
+            }
+       else if (this->mAlignmentEnd == NO_ALIGNMENT_START) {
+	    this->mAlignmentEnd = getAlignmentStart() + getCigar()->getReferenceLength() - 1;
+	    }
+        return this->mAlignmentEnd;
+	}
+int SAMRecord::getUnclippedStart() {
+    if(isReadUnmapped()) return NO_ALIGNMENT_START;
+    return getAlignmentStart() - getCigar()->getLeftClipLength();
+    }
+int SAMRecord::getUnclippedEnd() {
+    if(isReadUnmapped()) return NO_ALIGNMENT_START;
+    return getAlignmentEnd() + getCigar()->getRightClipLength();
+    }
+
+const char* SAMRecord::getReadName() {
+    return bam_get_qname(this->b);
+    }
+
+int SAMRecord::getReadNameLength() {
+    return cor()->l_qname;
+    }
+
 
