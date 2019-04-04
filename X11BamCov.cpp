@@ -45,10 +45,10 @@ THE SOFTWARE.
 #include "X11Launcher.hh"
 #include "Utils.hh"
 #include "SAMFile.hh"
-#include "Palette.hh"
 #include "Hershey.hh"
 #include "version.hh"
 #include "macros.hh"
+#include "Graphics.hh"
 
 using namespace std;
 
@@ -149,6 +149,7 @@ class X11BamCov: public X11Launcher
 	    virtual int doWork(int argc,char** argv);
 	    virtual void repaint();
 	    virtual void paint();
+	    virtual void paint(Graphics& g);
 	    virtual void usage(std::ostream& out);
 	};
 
@@ -212,11 +213,18 @@ X11BamCov::~X11BamCov() {
 		delete iter;
 		}
 	}
+
 #define MARGIN_TOP 20
 void X11BamCov::paint() {
-GC gc = ::XCreateGC(this->display, this->window, 0, 0);
-XSetForeground(this->display, gc, WhitePixel(this->display, this->screen_number));
-::XFillRectangle(this->display,this->window, gc,0,0,this->window_width,this->window_height);
+    X11Graphics g(this->display, this->window);
+    paint(g);
+}
+
+
+void X11BamCov::paint(Graphics& g) {
+
+g.setColorName("white");
+g.fillRect(0,0,this->window_width,this->window_height);
 
 double max_depth = 1.0;
 
@@ -227,7 +235,8 @@ for(auto bam: this->bams) {
 for(auto bam: this->bams) {
 	bam->max_depth = max_depth;
 	}
-XSetForeground(this->display, gc, BlackPixel(this->display, this->screen_number));
+g.setColorName("black");
+
 
 ChromStartEnd* rgn = this->regions[this->region_idx];
 string win_title;
@@ -248,7 +257,8 @@ string win_title;
 			;
 	string title= os.str();
 	int title_width= title.size()*12;
-	hershey.paint(this->display,this->window, gc,title.c_str(),
+	X11Graphics g(this->display,this->window);
+	hershey.paint(&g,title.c_str(),
 			this->window_width/2 - title_width/2,
 			1,
 			title_width,
@@ -270,44 +280,45 @@ for(auto bam: this->bams) {
 		ruledy=1;
 	}
 
-   vector<XPoint> points;
-   XPoint pt1={(pixel_t)bam->bounds.x,(pixel_t)(bam->bounds.y+bam->bounds.height)};
-   points.push_back(pt1);
+   double* array_x=new double[2+bam->coverage.size()];
+   double* array_y=new double[2+bam->coverage.size()];
+   array_x[0] = (bam->bounds.width+bam->bounds.x);
+   array_y[0] = (bam->bounds.y+bam->bounds.height);
+
+   array_x[1] = (bam->bounds.x);
+   array_y[1] = (bam->bounds.y+bam->bounds.height);
+
    for(size_t i=0;i< bam->coverage.size();i++)
    		{
    		double h = (bam->coverage[i]/bam->max_depth)*bam->bounds.height;
-   		XPoint pt;
-   		pt.x = (pixel_t)(bam->bounds.x+i);
-   		pt.y = (pixel_t)(bam->bounds.y+bam->bounds.height - h);
-   		points.push_back(pt);
+   		array_x[2+i] = (bam->bounds.x+i);
+   		array_y[2+i] = (bam->bounds.y+bam->bounds.height - h);
    		}
-   XPoint pt2={
-		(pixel_t)(bam->bounds.width+bam->bounds.x),
-		(pixel_t)(bam->bounds.y+bam->bounds.height)
-		};
-   points.push_back(pt2);
-   points.push_back(pt1);
+
 
   if(rgn->start!=rgn->original_start || rgn->end!=rgn->original_end) {
   	pixel_t x1 = (pixel_t)(bam->bounds.x + ((rgn->original_start-rgn->start)/(double)rgn->length())*bam->bounds.width);
 	pixel_t x2 = (pixel_t)(bam->bounds.x + ((rgn->original_end-rgn->start)/(double)rgn->length())*bam->bounds.width);
-	XSetForeground(this->display, gc,palette->gray(0.9).pixel);
-	::XFillRectangle(this->display,this->window, gc,x1,bam->bounds.y,(x2-x1),bam->bounds.height);
+	g.setGray(0.9);
+	g.fillRect(x1,bam->bounds.y,(x2-x1),bam->bounds.height);
   }
   // print ruler
   double curr_depth = ruledy;
   while(curr_depth <= bam->max_depth) {
    	  double y =  bam->bounds.y + bam->bounds.height- ((curr_depth/bam->max_depth) * bam->bounds.height);
 	  if(y <  bam->bounds.y) break;
-	  XSetForeground(this->display, gc,palette->gray(0.8).pixel);
-	  XDrawLine(this->display, this->window, gc, (int)bam->bounds.x, (int)y,(int)(bam->bounds.x+bam->bounds.width), (int)y);
+	  g.setGray(0.8);
+	  g.drawLine(
+		  bam->bounds.x, y,
+		  (bam->bounds.x+bam->bounds.width),
+		  y);
 	  curr_depth+=ruledy;
   	  }
 
-
-   XSetForeground(this->display, gc,palette->dark_slate_gray.pixel);
-   ::XFillPolygon(this->display,this->window, gc, &points[0], (int)points.size(), Complex,CoordModeOrigin);
-
+   g.setColor(47, 79, 79);
+   g.fillPolygon(2+bam->coverage.size(),array_x,array_y);
+   delete[] array_x;
+   delete[] array_y;
  
   
 
@@ -317,47 +328,42 @@ for(auto bam: this->bams) {
    while(curr_depth <= bam->max_depth) {
    	  double y =  bam->bounds.y + bam->bounds.height- ((curr_depth/bam->max_depth) * bam->bounds.height);
    	  if(y <  bam->bounds.y) break;
-   	  XSetForeground(this->display, gc,palette->gray(0.8).pixel);
-	  XSetFunction(this->display, gc, GXxor);
-   	  XDrawLine(this->display, this->window, gc, (int)bam->bounds.x, (int)y,(int)(bam->bounds.x+bam->bounds.width), (int)y);
-          XSetFunction(this->display, gc, GXcopy);
+   	  //g.setGray(0.8);
+	  //XSetFunction(this->display, gc, GXxor);
+   	  g.drawLine( bam->bounds.x,y,(bam->bounds.x+bam->bounds.width),y);
+          //XSetFunction(this->display, gc, GXcopy);
 
-   	  XSetForeground(this->display, gc,palette->gray(0.5).pixel);
+   	  g.setGray(0.5);
    	  char tmp[20];
    	  sprintf(tmp,"%d",(int)curr_depth);
    	  if(y-7 > bam->bounds.y) {
-		  hershey.paint(this->display,this->window,gc,
-				tmp,
-				bam->bounds.x+1,
-				(int)y-7,
-				(int)7*strlen(tmp),
-				7
-				);
+   		  g.drawText(tmp,
+   			 bam->bounds.x+1,
+			(int)y-7,
+			(int)7*strlen(tmp),
+			7);
 		  }
    	  curr_depth+=ruledy;
-     }
-   
-
+	 }
   
 
   if(this->show_sample_name) {
-        XSetForeground(this->display, gc, palette->gray(0.1).pixel);
-      hershey.paint(this->display,this->window, gc,bam->sample.c_str(),
+        g.setGray(0.1);
+        g.drawText(
+        	bam->sample.c_str(),
 		bam->bounds.x,
 		bam->bounds.y+1,
 		std::min((int)bam->bounds.width,12*(int)bam->sample.size()),
 		std::min(20,(int)(bam->bounds.height/10))
 		);
 	}
-   XSetForeground(this->display, gc, palette->gray(0.0).pixel);
-   ::XDrawRectangle(this->display,this->window, gc,
-		bam->bounds.x,
+    g.setGray(0.0);
+    g.drawRect( bam->bounds.x,
 		bam->bounds.y,
 		bam->bounds.width,
 		bam->bounds.height
 		);
    }
-XFlush(this->display);
 }
 
 
@@ -593,11 +599,11 @@ int X11BamCov::doWork(int argc,char** argv) {
 	while(getline(bamin,line)) {
 		if(line.empty() || line[0]=='#') continue;
 		BamW* bamFile	 = (BamW*)samFileFactory.open(line.c_str());
-		if(bamFile->sample.empty()) {
+		if(bamFile->getSample().empty()) {
 			bamFile->sample.assign(line);
 		} else
 		{
-			bamFile->sample.assign(*(bamFile->samples.begin()));
+			bamFile->sample.assign(bamFile->getSample());
 		}
 		this->bams.push_back(bamFile);
 		}

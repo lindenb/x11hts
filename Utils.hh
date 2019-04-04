@@ -45,9 +45,20 @@ class Utils {
 	static std::string& trim(std::string& line);
 	static int parseInt(const char* s);
 	static std::string niceInt(int i);
+
+
 	static std::size_t split(char delim,std::string line,std::vector<std::string>& tokens);
 	static std::size_t split(char delim,std::string line,std::vector<std::string>& tokens,std::size_t limit);
+
+	template <class T>
+	static std::string join(const char* delim,T begin,T end);
+
 	static std::string join(const char* delim,const std::vector<std::string>& tokens);
+	static std::string escapeXml(const char* s);
+
+	static std::string substring_before(const std::string& line,const char* delim);
+	static std::string substring_after(const std::string& line,const char* delim);
+
 };
 
 #endif

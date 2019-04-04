@@ -22,57 +22,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 */
-#ifndef HERSHEY_H
-#define HERSHEY_H
-#include <vector>
-#include <cstdio>
-#include <cstring>
-#include <cstdlib>
-#include <cctype>
-#include <iostream>
-#include <sstream>
-#include "config.h"
-#include "Graphics.hh"
-#include "Utils.hh"
+
+#ifndef LOCATABLE_HH
+#define LOCATABLE_HH
 
 
 
-class Hershey
-	{
-	private:
-		struct Operator
-			{
-			double x;
-			double y;
-			int op;
-			};
-		const int MOVETO;
-		const int LINETO;
-		std::vector<Operator> array;
-	public:
-		double scalex;
-		double scaley;
-
-		Hershey();
-		virtual ~Hershey();
-	private:
-		const char* charToHersheyString(char c);
-		void  charToPathOp(char letter);
-	public:	
-		void paint(
-		    Graphics* g,
-		    const char* s,
-		    double x, double y,
-		    double width, double height
-		    );
-		void svgPath(
-			std::ostream& out,
-			const char* s,
-			double x, double y,
-			double width, double height
-			);
-	};
-
+class Locatable {
+    public:
+	Locatable();
+	virtual ~Locatable();
+	virtual const char* getContig() const =0 ;
+	virtual int getStart() const = 0 ;
+	virtual int getEnd() const = 0 ;
+	virtual int getLengthOnReference() const;
+	virtual bool overlaps(const Locatable* other) const;
+	virtual bool hasContig(const char* ctg) const;
+	virtual bool contigsMatch(const Locatable* other) const;
+    };
 
 #endif
-

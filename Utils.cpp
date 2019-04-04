@@ -100,14 +100,26 @@ string Utils::niceInt(int i) {
 		}
 	return s2;
 	}
-string Utils::join(const char* delim,const vector<string>& tokens) {
+
+template <class T>
+string Utils::join(const char* delim,T begin,T end) {
 	ASSERT_NOT_NULL(delim);
 	ostringstream os;
-	for(size_t i=0;i< tokens.size();i++) {
-		if(i>0) os << delim;
-		os << tokens[i];
-		}
+	if(begin!=end) {
+	    os << *begin;
+	    begin++;
+	}
+
+	while(begin!=end) {
+	    os << delim << *begin;
+	    begin++;
+	    }
 	return os.str();
+	}
+
+
+string Utils::join(const char* delim,const vector<string>& tokens) {
+	return join(delim,tokens.begin(),tokens.end());
 	}
 
 int Utils::parseInt(const char* s){
@@ -131,7 +143,6 @@ bool Utils::endsWith(const std::string& line,const char* prefix) {
 	if(line.length()< len) return false;
 	return line.compare(line.length()-len,len,prefix)==0;
 	}
-
 
 std::size_t Utils::split(char delim,std::string line,std::vector<std::string>& tokens) {
 	tokens.clear();
@@ -159,7 +170,39 @@ std::size_t Utils::split(char delim,std::string line,std::vector<std::string>& t
 			tokens.push_back(line.substr(prev,i-prev));
 			prev=i+1;
 		}
-	}
+	    }
 	tokens.push_back(line.substr(prev,j-prev));
 	return tokens.size();
 	}
+
+string Utils::escapeXml(const char* s)   {
+    ostringstream os;
+    size_t i=0;
+
+    while(s[i]!=0)
+	{
+	switch(s[i])
+	    {
+	    case '\'' : os << "&apos;" ; break;
+	    case '\"' : os << "&quot;" ; break;
+	    case '&' : os << "&amp;" ; break;
+	    case '<' : os << "&lt;" ; break;
+	    case '>' : os << "&gt;" ; break;
+	    default: os << s[i];break;
+	    }
+	i++;
+	}
+    return os.str();
+    }
+
+std::string Utils::substring_before(const std::string& line,const char* delim) {
+string::size_type t=line.find(delim);
+if(t==string::npos) return "";
+return line.substr(0, t);
+}
+std::string substring_after(const std::string& line,const char* delim) {
+string::size_type t=line.find(delim);
+if(t==string::npos) return "";
+return line.substr(t+1);
+}
+

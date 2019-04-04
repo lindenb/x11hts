@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include "SAMFile.hh"
 #include "macros.hh"
+#include "Utils.hh"
 
 using namespace std;
 
@@ -23,6 +24,13 @@ SAMFile::~SAMFile() {
 	if(fp!=0) ::hts_close(fp);
 	}
 
+std::string SAMFile::getSample() const
+    {
+    for(auto p:this->rgid2rg) {
+	if(!Utils::isBlank(p.second.sample)) return p.second.sample;
+	}
+    return "";
+    }
 
 
 int SAMFile::contigToTid(const char* chrom) {
@@ -78,23 +86,30 @@ SAMFile* SAMFileFactory::open(const char* fn) {
 			}
 		}
 
-	if(instance->hdr->text!=NULL)
+	if(!Utils::isBlank(instance->hdr->text))
 		{
 		std::istringstream iss(instance->hdr->text);
 		std::string line;
 	    while(std::getline(iss, line, '\n'))
-			{
-	    	string::size_type  p = line.find("@RG\t");
-	    	if(p!=0) continue;
-	    	p = line.find("\tSM:");
-			if(p==string::npos) continue;
-			p+=4;
-			string::size_type  p2 = line.find("\t",p);
-			if(p2==string::npos) p2=line.size();
-			instance->samples.insert( line.substr(p,(p2-p)));
-			break;
+		{
+		if(!Utils::startsWith(line, "@RG\t")) continue;
+	    	SAMReadGroupRecord rg;
+	    	vector<string> tokens;
+	    	Utils::split('\t', line, tokens);
+	    	for(size_t i=1;i< tokens.size();i++)
+	    	    {
+	    	    if(Utils::startsWith(tokens[i],"ID:")) {
+	    		rg.id = tokens[i].substr(3);
+	    		}
+	    	    else if(Utils::startsWith(tokens[i],"SM:")) {
+			rg.sample = tokens[i].substr(3);
 			}
+	    	    }
+	    	if(rg.id.empty()) continue;
+		instance->rgid2rg.insert(make_pair(rg.id, rg));
 		}
+
+	    }
 	return instance;
 	}
 

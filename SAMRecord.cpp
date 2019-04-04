@@ -191,9 +191,16 @@ int SAMRecord::getAlignmentStart() {
 	if(isReadUnmapped()) return NO_ALIGNMENT_START;
 	return cor()->pos+1;
 	}
-int SAMRecord::getStart() {
-	return getAlignmentStart();
+int SAMRecord::getStart() const{
+	return (const_cast<SAMRecord*>(this))->getAlignmentStart();
 	}
+int SAMRecord::getEnd() const{
+	return (const_cast<SAMRecord*>(this))->getAlignmentEnd();
+	}
+const char* SAMRecord::getContig() const{
+	return (const_cast<SAMRecord*>(this))->getReferenceName();
+	}
+
 int SAMRecord::getInferredSize() {
 	return cor()->isize;
 	}

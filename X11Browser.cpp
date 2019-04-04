@@ -14,6 +14,8 @@
 #include "X11Launcher.hh"
 #include "Graphics.hh"
 #include "Utils.hh"
+#include "Faidx.hh"
+#include "Locatable.hh"
 
 #include "macros.hh"
 
@@ -32,21 +34,26 @@ enum display_base_mode
 
 class X11Browser;
 
-class Interval
+class BrowserInterval:public Locatable
     {
     public:
 	string contig;
 	int start;
 	int end;
+	BrowserInterval():contig("NA"),start(0),end(0) {}
+	virtual ~BrowserInterval() {}
+	virtual const char* getContig() const { return contig.c_str();}
+	virtual int getStart() const { return start;}
+	virtual int getEnd() const { return end;}
 
-	void assign(Interval* other) {
+	void assign(BrowserInterval* other) {
 	    contig.assign(other->contig);
 	    start = other->start;
 	    end = other->end;
 	}
 
 	int length() const {
-	    return 1+ (end-start);
+	    return this->getLengthOnReference();
 	}
     };
 
@@ -94,15 +101,19 @@ class X11Browser:public X11Launcher
 	private:
 		void drawArrow(Graphics& g,const char* fill,const char* stroke,double top_row_y,double feature_height,int refPos,int len,int arrow);
 		char getBaseAt(SAMRecord* rec,int pos);
+
 	public:
 		std::vector<SAMFile*> bams;
-		std::vector<Interval*> intervals;
+		std::vector<BrowserInterval*> intervals;
 		std::vector<vector<PairOrReads*>*> rows;
-		Interval* interval;
+		BrowserInterval* interval;
 		size_t bam_index;
 		size_t interval_idx;
 		bool group_by_pair;
 		int show_base;
+		IndexedFastaSequence* indexedFastaSequence;
+		std::shared_ptr<std::string> reference_seq;
+
 		X11Browser();
 		virtual ~X11Browser();
 		virtual double distance2pixel(int genomic_len);
@@ -113,6 +124,7 @@ class X11Browser:public X11Launcher
 		virtual int doWork(int argc,char** argv);
 		virtual void repaint();
 		virtual void paint();
+		virtual void paint(Graphics& g);
 		void zoomIn();
 		void zoomOut();
 		void goLeft(double f);
@@ -123,8 +135,10 @@ X11Browser::X11Browser():interval(0),
 	bam_index(0),
 	interval_idx(0),
 	group_by_pair(true),
-	show_base(display_base) {
-    interval = new Interval;
+	show_base(display_base),
+	indexedFastaSequence(0)
+    {
+    interval = new BrowserInterval;
     interval->contig.assign("undef");
     interval->start=1;
     interval->end=1;
@@ -137,14 +151,19 @@ X11Browser::X11Browser():interval(0),
     opt->arg("file");
     options.push_back(opt);
 
-    opt= new Option('R',true,"A bed file containing the regions to observe");
+    opt= new Option('r',true,"A bed file containing the regions to observe");
     opt->required();
     opt->arg("file.bed");
+    options.push_back(opt);
+
+    opt= new Option('R',true,"Indexed fasta file");
+    opt->arg("ref.fasta");
     options.push_back(opt);
 
     }
 
 X11Browser::~X11Browser() {
+	if(indexedFastaSequence!=0) delete indexedFastaSequence;
 	for(auto bam:bams) delete bam;
 	for(auto r:intervals) delete r;
 	if(interval!=0) delete interval;
@@ -208,9 +227,9 @@ void X11Browser::drawArrow(
 	x_array[4] = x_array[2];
 	y_array[4] = y_array[0];
 
-	g.setColor(fill);
+	g.setColorName(fill);
 	g.fillPolygon(5, x_array, y_array);
-	g.setColor(stroke);
+	g.setColorName(stroke);
 	g.drawPolygon(5, x_array, y_array);
 	}
     else if(arrow==ARROW_RIGHT)
@@ -233,16 +252,16 @@ void X11Browser::drawArrow(
 	x_array[4] = x_array[0];
 	y_array[4] = y_array[3];
 
-	g.setColor(fill);
+	g.setColorName(fill);
 	g.fillPolygon(5, x_array, y_array);
-	g.setColor(stroke);
+	g.setColorName(stroke);
 	g.drawPolygon(5, x_array, y_array);
     	}
     else //NO_ARROW
        	{
-	g.setColor(fill);
+	g.setColorName(fill);
 	g.fillRect(pos2pixel(refPos), top_row_y	, width, feature_height);
-	g.setColor(stroke);
+	g.setColorName(stroke);
 	g.drawRect(pos2pixel(refPos), top_row_y	, width, feature_height);
        	}
     }
@@ -251,16 +270,24 @@ char X11Browser::getBaseAt(SAMRecord* rec,int pos) {
     char c= rec->getBaseAt(pos);
     return c;
     }
-
 void X11Browser::paint() {
-    Graphics g(this->display,this->window);
-    g.setColor("white");
+    X11Graphics g(this->display,this->window);
+    paint(g);
+    //PSGraphics g2("jeter.ps",this->window_width,this->window_height);
+    //paint(g2);
+    }
+
+void X11Browser::paint(Graphics& g) {
+    g.setColorName("white");
     g.fillRect(0, 0, this->window_width, this->window_height);
     double y=0;
     double font_size = 7;
     /* title */
-    {
+	{
 	ostringstream os;
+
+	os << this->bams[this->bam_index]->getSample() << " ";
+
 	os << this->interval->contig
 		<< ":"
 		<< Utils::niceInt(this->interval->start)
@@ -273,7 +300,7 @@ void X11Browser::paint() {
 
 	double height=font_size+2;
 	double width = std::min(this->window_width,(int)(font_size*title.length()));
-	g.setColor(0.3);
+	g.setGray(0.3);
 	g.drawText(title.c_str(),
 		this->window_width/2.0-width/2.0,
 		y+1,
@@ -290,7 +317,7 @@ void X11Browser::paint() {
     int prev_pos=interval->start;
     int x = 0;
     double height=font_size+2;
-    g.setColor(0.3);
+    g.setGray(0.3);
     while(x<=this->window_width)  {
 	if(pixel2pos(x)<=prev_pos) {++x;continue;}
 	string label(Utils::niceInt(pixel2pos(x)));
@@ -314,20 +341,36 @@ void X11Browser::paint() {
     g.drawLine(0, y, this->window_width,y);
     }
     /* reference */
-    {
-    double onebase=distance2pixel(1);
-    if(onebase > font_size) {
-	int p=interval->start;
-	while(p <= interval->end)  {
-	     double w= min(font_size,onebase);
-	     g.drawText("N",pos2pixel(p)+onebase/2.0-w/2.0, y, w,font_size);
-	     p++;
-	     }
-	y+=font_size;
-	g.drawLine(0, y, this->window_width,y);
-	y++;
+    if(this->reference_seq)
+	{
+	double onebase=distance2pixel(1);
+	if(onebase > font_size) {
+	    int p= interval->start;
+	    while(p <= interval->end)  {
+		 size_t gpos = (size_t)(p - this->interval->start);
+		 char base='N';
+		 if(gpos< this->reference_seq->size())
+		     {
+		     base = this->reference_seq->at((size_t)gpos);
+		     }
+
+		 double w= min(font_size,onebase);
+		 g.setColorForBase(base);
+		 g.drawChar(base,pos2pixel(p)+onebase/2.0-w/2.0, y, w,font_size);
+		 p++;
+		 }
+	    y+=font_size;
+	    g.drawLine(0, y, this->window_width,y);
+	    y++;
+	    }
 	}
-    }
+
+    /** DEPTH **/
+    double depth_height=100;
+    map<int,int> pos2coverage;
+    if(this->interval->length() > 50000) depth_height=0;
+    double bottom_depth=y+depth_height;
+    y=bottom_depth+1;
 
     /** each row */
     double feature_height= std::max(10.0,std::min(30.0,distance2pixel(1)));
@@ -340,9 +383,9 @@ void X11Browser::paint() {
 	    PairOrReads* por = row->at(por_idx);
 	    if(this->group_by_pair)
 		{
-		g.setColor(0.4);
+		g.setGray(0.4);
 		if(por->first->isPaired() && !por->first->isProperPair()){
-		    g.setColor("red");
+		    g.setColorName("red");
 		    }
 
 		g.drawLine(pos2pixel(por->getStart()), midy, pos2pixel(por->getEnd()+1), midy);
@@ -431,20 +474,47 @@ void X11Browser::paint() {
 				   );
 			    /* draw bases */
 			    double one_base=distance2pixel(1);
-			    if(ce.op->op!='H' && this->show_base!=display_none && one_base >4) {
+			    if(ce.op->op!='H' ) {
 				for(int t=0;t< ce.len ;++t) {
 				    int basepos = refPos+t;
 				    if(basepos< this->interval->start) continue;
 				    if(basepos> this->interval->end) break;
-				    char base = rec->getBaseAt(readPos+t);
-				    g.setColorForBase(base);
+
+				    if(!ce.op->isClipping() /* don't use clipped base for coverage */
+					  && depth_height>0 /* there is coverage */) {
+					/* add this base for coverage */
+					pos2coverage[basepos]++;
+				    }
+
+				    char nucleotide = rec->getBaseAt(readPos+t);
+				    char base= nucleotide;
+
 				    if(this->show_base==display_readname)
 					{
 					base = readPos+t >= rec->getReadNameLength()?' ': rec->getReadName()[readPos+t];
 					base= rec->isReverseStrand()?tolower(base):toupper(base);
 					}
 				    double width=std::min(feature_height,one_base);
-				    g.drawChar(base, pos2pixel(basepos)+one_base/2.0-width/2.0, top_row_y+2, width, feature_height-4);
+				    bool print_base= this->show_base!=display_none;
+
+				    if(this->reference_seq &&
+					(basepos >= this->interval->start) &&
+					(basepos - this->interval->start) < this->reference_seq->size()) {
+					char ref_base = toupper(this->reference_seq->at(basepos - this->interval->start));
+					if(ref_base!='N' && nucleotide!='N' && ref_base!=nucleotide)
+					    {
+					    g.setColorName("red");
+					    g.fillRect(pos2pixel(basepos), top_row_y, one_base, feature_height);
+					    print_base=true;
+					    }
+					}
+				    if(one_base<1) print_base=false;
+
+				    //this->show_base!=display_none && one_base >4)
+				    if(print_base) {
+					g.setColorForBase(base);
+					g.drawChar(base, pos2pixel(basepos)+one_base/2.0-width/2.0, top_row_y+2, width, feature_height-4);
+					}
 				    }
 				}
 			    refPos+=ce.len;
@@ -457,20 +527,53 @@ void X11Browser::paint() {
 		/* print insertions */
 		for(auto ins_x:insertions_x)
 		    {
-		    g.setColor("red");
+		    g.setColorName("red");
 		    g.fillRect(ins_x, top_row_y, 1, feature_height);
 		    }
 
 		}
+	    }
+	    y+=feature_height+2;
+	}/* end for each-row */
 
+    /* print depth of coverage */
+    if(depth_height>1) {
+	int max_cov=1;
+	for(auto p:pos2coverage) {
+	    max_cov=std::max(max_cov,p.second);
+	    }
+	double* x_array=new double[2+this->window_width];
+	double* y_array=new double[2+this->window_width];
 
+	x_array[0]=this->window_width;
+	y_array[0]=bottom_depth;
+
+	x_array[1]=0;
+	y_array[1]=y_array[0];
+
+	for(int i=0;i< this->window_width;i++)
+	    {
+	    int g1 = pixel2pos(i+0);
+	    int g2 = pixel2pos(i+1);
+	    int n=0;
+	    double t=0.0;
+	    while(g1<=g2) {
+		n++;
+		t+= pos2coverage[g1];
+		++g1;
+		}
+	    double v=t/n;
+	    x_array[2+i]=i;
+	    y_array[2+i]= bottom_depth - depth_height*( v/(double)max_cov);
+	    }
+	g.fillPolygon(2+this->window_width, x_array, y_array);
+	delete[] x_array;
+	delete[] y_array;
 	}
-	y+=feature_height+2;
-    }
-
 
     }
 void X11Browser::repaint() {
+
 	for(size_t i=0;i< rows.size();++i){
 		for(size_t j=0;j< rows[i]->size();++j) delete rows[i]->at(j);
 		delete rows[i];
@@ -480,6 +583,18 @@ void X11Browser::repaint() {
 	std::map<std::string,PairOrReads*> name2pair;
 	SAMFile* bam = this->bams[this->bam_index];
 	int tid = bam->contigToTid(interval->contig.c_str());
+
+	/* reload reference sequence */
+	this->reference_seq.reset();
+	if(this->indexedFastaSequence!=0 && this->interval->length()< 2*this->window_width)
+	    {
+	    this->reference_seq = this->indexedFastaSequence->fetch(
+		    this->interval->contig.c_str(),
+		    this->interval->start-1,
+		    this->interval->end
+		    );
+	    }
+
 
 	if(tid>=0) {
 		int ret;
@@ -590,6 +705,7 @@ int X11Browser::doWork(int argc,char** argv)
 	{
 	char* bam_list = NULL;
 	char* region_list = NULL;
+	char* reference_fasta_file = NULL;
 	int opt;
 
 	if(argc<=1) {
@@ -608,8 +724,11 @@ int X11Browser::doWork(int argc,char** argv)
 		case 'B':
 			bam_list = optarg;
 			break;
-		case 'R':
+		case 'r':
 			region_list = optarg;
+			break;
+		case 'R':
+			reference_fasta_file = optarg;
 			break;
 		case '?':
 			cerr << "unknown option -"<< (char)optopt << endl;
@@ -620,6 +739,12 @@ int X11Browser::doWork(int argc,char** argv)
 		}
 	}
 	if(optind!=argc) FATAL("Illegal number of arguments.");
+
+	/** FASTA REF */
+	if(reference_fasta_file!=NULL)
+	    {
+	    this->indexedFastaSequence = new IndexedFastaSequence(reference_fasta_file);
+	    }
 
 	/* BEGIN OPEN BAM FILES ---------------------------------------- */
 	if(bam_list == NULL)
@@ -655,7 +780,7 @@ int X11Browser::doWork(int argc,char** argv)
 	    if(!bedin.is_open()) FATAL("Cannot open " << region_list << " "<< strerror(errno));
 	    while(getline(bedin,line)) {
 	  	if(bedCodec.is_ignore(line)) continue;
-	  	Interval* interval = new Interval;
+	  	BrowserInterval* interval = new BrowserInterval;
 	  	Utils::split('\t',line,tokens);
 		if(!bedCodec.parse(tokens,&interval->contig,&interval->start,&interval->end)) {
 		    delete interval;

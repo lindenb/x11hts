@@ -1,6 +1,7 @@
 #ifndef SAMRECORD_HH
 #define SAMRECORD_HH
 
+#include "Locatable.hh"
 #include <vector>
 #include <htslib/sam.h>
 #include <htslib/faidx.h>
@@ -49,7 +50,7 @@ class Cigar
 		int getLeftClipLength() const;
 	};
 
-class SAMRecord
+class SAMRecord: public Locatable
 	{
 	private:
 		bool _clone;
@@ -82,7 +83,9 @@ class SAMRecord
 		int getAlignmentEnd();
 		int getUnclippedStart();
 		int getUnclippedEnd();
-		int getStart();
+		const char* getContig() const;
+		int getStart() const;
+		int getEnd() const;
 		int getInferredSize();
 		int getReadLength();
 		char getBaseAt(int i);

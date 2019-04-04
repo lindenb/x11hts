@@ -22,57 +22,34 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 */
-#ifndef HERSHEY_H
-#define HERSHEY_H
-#include <vector>
-#include <cstdio>
 #include <cstring>
-#include <cstdlib>
-#include <cctype>
-#include <iostream>
-#include <sstream>
-#include "config.h"
-#include "Graphics.hh"
-#include "Utils.hh"
+#include "Locatable.hh"
+
+using namespace std;
+
+Locatable::Locatable() {}
+Locatable::~Locatable() {};
 
 
-
-class Hershey
-	{
-	private:
-		struct Operator
-			{
-			double x;
-			double y;
-			int op;
-			};
-		const int MOVETO;
-		const int LINETO;
-		std::vector<Operator> array;
-	public:
-		double scalex;
-		double scaley;
-
-		Hershey();
-		virtual ~Hershey();
-	private:
-		const char* charToHersheyString(char c);
-		void  charToPathOp(char letter);
-	public:	
-		void paint(
-		    Graphics* g,
-		    const char* s,
-		    double x, double y,
-		    double width, double height
-		    );
-		void svgPath(
-			std::ostream& out,
-			const char* s,
-			double x, double y,
-			double width, double height
-			);
-	};
+int Locatable::getLengthOnReference() const {
+        return 1+  getEnd() - getStart();
+    }
 
 
-#endif
+bool Locatable::overlaps(const Locatable* other) const{
+    return contigsMatch(other) &&
+    	!( this->getEnd() < other->getStart() || this->getStart() > other->getEnd())
+	;
+    }
+
+bool Locatable::hasContig(const char* ctg) const
+    {
+    return getContig() != NULL &&
+	    ctg != NULL &&
+	    strcmp(getContig(),ctg)==0;
+    }
+
+bool Locatable::contigsMatch(const Locatable* other) const {
+    return  other != NULL && hasContig(other->getContig());
+    }
 
