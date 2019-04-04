@@ -257,8 +257,8 @@ string win_title;
 			;
 	string title= os.str();
 	int title_width= title.size()*12;
-	X11Graphics g(this->display,this->window);
-	hershey.paint(&g,title.c_str(),
+	g.drawText(
+			title.c_str(),
 			this->window_width/2 - title_width/2,
 			1,
 			title_width,

@@ -6,8 +6,7 @@ X11Launcher::X11Launcher():display(0),screen(0),
 		screen_number(0),
 		window(0),
 		window_width(0),
-		window_height(0),
-		palette(0)
+		window_height(0)
 {
 }
 
@@ -34,7 +33,6 @@ void X11Launcher::createWindow() {
 
 	 this->screen_number = DefaultScreen(this->display);
 
-	 this->palette = new Palette(this->display,  this->screen_number);
 
 	 this->screen = ::XScreenOfDisplay(this->display, this->screen_number);
 	 this->window = ::XCreateSimpleWindow(
@@ -59,6 +57,4 @@ void X11Launcher::disposeWindow() {
 	window=0;
 	window_height=0;
 	window_width=0;
-	delete palette;
-	palette = NULL;
 	}
