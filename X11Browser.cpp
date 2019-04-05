@@ -230,10 +230,13 @@ void X11Browser::drawArrow(
 	double top_row_y,double feature_height,int refPos,int len,int arrow
 	)
     {
+
     double width = distance2pixel(len);
     double arrow_size = (arrow==NO_ARROW?0:5);
     if(arrow_size > feature_height) arrow=NO_ARROW;
 
+    if(pos2pixel(refPos) > this->window_width) return;
+    if(pos2pixel(refPos+len) <0) return;
 
 
     if(arrow==ARROW_LEFT)
@@ -289,6 +292,8 @@ void X11Browser::drawArrow(
     	}
     else //NO_ARROW
        	{
+
+
 	g.setColorName(fill);
 	g.fillRect(pos2pixel(refPos), top_row_y	, width, feature_height);
 	g.setColorName(stroke);
@@ -420,7 +425,7 @@ void X11Browser::paint(Graphics& graphics) {
 	    PairOrReads* por = row->at(por_idx);
 
 	    /* draw a line for the pair segment */
-	    if(this->group_by_pair && por_idx==0 && por->second!=0)
+	    if(this->group_by_pair && por->second!=0)
 		{
 		if(por->first->isPaired() && !por->first->isProperPair()){
 		    g.setColorName("red");
@@ -429,10 +434,6 @@ void X11Browser::paint(Graphics& graphics) {
 		    {
 		    g.setColorName("blue");
 		    }
-		cerr << por->getStart() << endl;
-		cerr << por->getEnd() << endl;
-		cerr << pos2pixel(por->getStart()) << endl;
-		cerr << pos2pixel(por->getEnd()+1) << endl;
 		g.drawLine(
 			trimx(pos2pixel(por->getStart())),
 			midy,
@@ -464,9 +465,17 @@ void X11Browser::paint(Graphics& graphics) {
 		    int arrow= NO_ARROW;
 
 		    /* shall we draw an arrow ? */
-		    if(rec->isReverseStrand() && cigar_index==0 && this->show_clip )
+		    if(rec->isReverseStrand() && !this->show_clip) {
+			if(cigar_index==0 && ce.op->isMatch()) arrow  = ARROW_LEFT;
+			else if(cigar_index>0 &&  cigar->at(cigar_index-1).op->isClipping()) arrow  = ARROW_LEFT;
+			}
+		    else if(rec->isReverseStrand() && cigar_index==0 && this->show_clip )
 			{
 			arrow  = ARROW_LEFT;
+			}
+		    else if(rec->isReverseStrand() && !this->show_clip) {
+			if(cigar_index+1==cigar->size() && ce.op->isMatch()) arrow  = ARROW_RIGHT;
+			else if(cigar_index+1<cigar->size() &&  cigar->at(cigar_index+1).op->isClipping()) arrow  = ARROW_LEFT;
 			}
 		    else  if(!rec->isReverseStrand() && cigar_index+1==cigar->size() && this->show_clip)
 			{
@@ -484,6 +493,21 @@ void X11Browser::paint(Graphics& graphics) {
 			case 'N':
 			case 'D':
 			    {
+			    double x0=trimx(pos2pixel(refPos));
+			    double x1=trimx(pos2pixel(refPos+ce.len));
+			    // enough space to draw the insert size ?
+			    if(x1-x0>100) {
+				ostringstream os;
+				os << Utils::niceInt(ce.len) << "bp";
+				string title = os.str();
+				g.setColorName("red");
+				double w = std::min(title.size()*7.0,x1-x0);
+				g.drawText(title.c_str(),
+					x0+(x1-x0)/2.0- w/2.0,
+					midy+3,
+					w,
+					7);
+				}
 			    refPos+=ce.len;
 			    break;
 			    }
@@ -495,8 +519,8 @@ void X11Browser::paint(Graphics& graphics) {
 			    {
 			    /* don't print clip */
 			    if(!show_clip && ce.op->isClipping()) {
-				refPos+=ce.len;
-				if(ce.op->op!='H') readPos+=ce.len;
+				refPos += ce.len;
+				if(ce.op->op!='H') readPos += ce.len;
 				break;
 				}
 
@@ -524,10 +548,15 @@ void X11Browser::paint(Graphics& graphics) {
 				stroke="black";
 				}
 
-			    drawArrow(g,
+
+			    drawArrow(
+				   g,
 				   fill,
 				   stroke,
-				   top_row_y,feature_height,refPos,ce.len,
+				   top_row_y,
+				   feature_height,
+				   refPos,
+				   ce.len,
 				   arrow
 				   );
 			    /* draw bases */
@@ -758,7 +787,6 @@ void X11Browser::doMove(double factor) {
     if(dlen<1) dlen=1;
     int x=  this->interval->start + (factor<0.0?-1:1)*dlen;
     if(x<1) x=1;
-    cerr << "##move " << factor << " from " <<  this->interval->start << "-" << this->interval->end << " to " << x << "-" << (x+len-1) << endl;
     this->interval->start = x;
     this->interval->end = x + len -1;
     }
@@ -984,8 +1012,14 @@ int X11Browser::doWork(int argc,char** argv) {
 
 int PairOrReads::getStart() const{
     int i = this->owner->getStart(first);
-    if( this->second!=0 ) {
+    if(this->owner->group_by_pair)
+    	{
+    	return i;
+    	}
+    else if( this->second!=0 ) {
 	assert(strcmp(first->getReadName(),second->getReadName())==0);
+	assert(this->first->hasMateMappedOnSameReference());
+
 	i=std::min(i,this->owner->getStart(second));
 	assert(i>0);
 	}
@@ -999,8 +1033,13 @@ int PairOrReads::getStart() const{
 
 int PairOrReads::getEnd() const {
     int i =  this->owner->getEnd(first);
-    if(second!=0 ) {
+    if(this->owner->group_by_pair)
+	{
+	return i;
+	}
+    else if(second!=0 ) {
 	assert(strcmp(first->getReadName(),second->getReadName())==0);
+	assert(this->first->hasMateMappedOnSameReference());
 	i=std::max(i, this->owner->getEnd(second));
 	assert(i>0);
 	}
