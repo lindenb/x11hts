@@ -3,6 +3,7 @@
 
 #include "Locatable.hh"
 #include <vector>
+#include <memory>
 #include <htslib/sam.h>
 #include <htslib/faidx.h>
 
@@ -43,6 +44,7 @@ class Cigar
 		std::vector<CigarElement> elements;
 	public:
 		Cigar(const bam1_t *b);
+		Cigar(const char* cig);
 		int size();
 		CigarElement& at(int i);
 		int getReferenceLength() const;
@@ -54,14 +56,14 @@ class SAMRecord: public Locatable
 	{
 	private:
 		bool _clone;
-		Cigar* _cigar;
-		int mAlignmentEnd;
+		mutable Cigar* _cigar;
+		mutable int mAlignmentEnd;
 	public:
 		const bam_hdr_t *header;
 		bam1_t *b;
 		SAMRecord(const bam_hdr_t *header, bam1_t *b,bool clone);
 		~SAMRecord();
-		bam1_core_t* cor();
+		const bam1_core_t* cor() const;
 		const char* getReadName();
 		int getReadNameLength();
 		int getFlag() const;
@@ -78,14 +80,16 @@ class SAMRecord: public Locatable
 		bool isSupplementaryAlignment() const;
 		bool isSecondaryOrSupplementaryAlignment() const;
 		Cigar* getCigar();
-		int getReferenceIndex();
+		int getReferenceIndex() const;
 		const char* getReferenceName();
-		int getMateReferenceIndex();
+		int getMateReferenceIndex() const;
 		const char* getMateReferenceName();
-		int getAlignmentStart();
+		int getAlignmentStart() const;
 		int getAlignmentEnd();
 		int getUnclippedStart();
 		int getUnclippedEnd();
+		int getMateAlignmentStart() const;
+
 		const char* getContig() const;
 		int getStart() const;
 		int getEnd() const;
@@ -93,6 +97,14 @@ class SAMRecord: public Locatable
 		int getReadLength();
 		char getBaseAt(int i);
 		char getQualAt(int i);
+		bool hasAttribute(const char* att_name) const;
+		std::shared_ptr<std::string> getStringAttribute(const char* s) const;
+
+		std::shared_ptr<std::string> getMateCigarString() const;
+		std::shared_ptr<Cigar> getMateCigar() const;
+		int getMateAlignmentEnd() const;
+		int getMateAlignmentEndThenStart() const;
+		bool hasMateMappedOnSameReference() const;
 	};
 
 

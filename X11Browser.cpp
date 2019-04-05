@@ -98,28 +98,16 @@ class PairOrReads:public Locatable
 			second=rec;
 		}
 
-		~PairOrReads() {
+		virtual ~PairOrReads() {
 			delete first;
 			if(second!=0) delete second;
 		}
 
-		const char* getContig() const {
+		virtual const char* getContig() const {
 		    return first->getContig();
 		    }
-		int getStart() const{
-			int i = this->owner->getStart(first);
-			if(second!=0 ) {
-				i=std::min(i,this->owner->getStart(second));
-			}
-			return i;
-		}
-		int getEnd() const {
-			int i =  this->owner->getEnd(first);
-			if(second!=0 ) {
-				i=std::max(i, this->owner->getEnd(second));
-			}
-			return i;
-		    }
+		virtual int getStart() const;
+		virtual int getEnd() const;
 	};
 
 static bool compare_pairs(const PairOrReads* p1,const PairOrReads* p2) {
@@ -157,10 +145,9 @@ class X11Browser:public X11Launcher
 		virtual void repaint();
 		virtual void paint();
 		virtual void paint(Graphics& g);
-		void zoomIn();
-		void zoomOut();
-		void goLeft(double f);
-		void goRight(double f);
+		double trimx(double v) { return std::max(0.0,std::min(v,(double)this->window_width));}
+		void doZoom(double f);
+		void doMove(double f);
 	};
 
 X11Browser::X11Browser():interval(0),
@@ -415,7 +402,7 @@ void X11Browser::paint(Graphics& graphics) {
     double bottom_depth=y+depth_height;
     y=bottom_depth+1;
 
-    Nullraphics nullg;
+    NullGraphics nullg;
 
 
     /** each row */
@@ -431,14 +418,27 @@ void X11Browser::paint(Graphics& graphics) {
 	/** all elements on this row */
 	for(size_t por_idx=0;por_idx<row->size();++por_idx) {
 	    PairOrReads* por = row->at(por_idx);
-	    if(this->group_by_pair)
+
+	    /* draw a line for the pair segment */
+	    if(this->group_by_pair && por_idx==0 && por->second!=0)
 		{
-		g.setGray(0.4);
 		if(por->first->isPaired() && !por->first->isProperPair()){
 		    g.setColorName("red");
 		    }
-
-		g.drawLine(pos2pixel(por->getStart()), midy, pos2pixel(por->getEnd()+1), midy);
+		else
+		    {
+		    g.setColorName("blue");
+		    }
+		cerr << por->getStart() << endl;
+		cerr << por->getEnd() << endl;
+		cerr << pos2pixel(por->getStart()) << endl;
+		cerr << pos2pixel(por->getEnd()+1) << endl;
+		g.drawLine(
+			trimx(pos2pixel(por->getStart())),
+			midy,
+			trimx(pos2pixel(por->getEnd()+1)),
+			midy
+			);
 		}
 	    // each side of the read pair
 	    for(int side=0;side<2;++side) {
@@ -449,10 +449,13 @@ void X11Browser::paint(Graphics& graphics) {
 		int readPos = 0;
 		Cigar* cigar = rec->getCigar();
 
+		g.setColorName("black");
 		/* rec line */
 		g.drawLine(
-		    pos2pixel(rec->getUnclippedStart()), midy,
-		    pos2pixel(rec->getUnclippedEnd()+1), midy
+			trimx(pos2pixel(rec->getUnclippedStart())),
+			midy,
+			trimx(pos2pixel(rec->getUnclippedEnd()+1)),
+			midy
 		    );
 
 		// loop over read
@@ -621,6 +624,7 @@ void X11Browser::paint(Graphics& graphics) {
 	    x_array[2+i]=i;
 	    y_array[2+i]= bottom_depth - depth_height*( v/(double)max_cov);
 	    }
+	graphics.setGray(0.3);
 	graphics.fillPolygon(2+this->window_width, x_array, y_array);
 	delete[] x_array;
 	delete[] y_array;
@@ -734,38 +738,31 @@ void X11Browser::repaint() {
 	paint();
 	}
 
-void X11Browser::zoomIn() {
-    int len  = this->interval->length();
+void X11Browser::doZoom(double factor) {
+    const int len  = this->interval->length();
     if(len<=1) return;
-    int new_len= std::min(len,(int)(len*0.66)-1);
-    if(new_len<=1) return;
+    int new_len= len*factor;
+    if(new_len==len && factor>1.0) new_len=len+1;
+    if(new_len==len && factor<1.0) new_len=len-1;
+    if(new_len<0) return;
     int mid = this->interval->start+len/2;
     this->interval->start = std::max(1,mid-new_len);
     this->interval->end = this->interval->start+new_len;
-}
-
-void X11Browser::zoomOut() {
-    int len  = this->interval->length();
-    int new_len= std::max(len,(int)(len*1.33)+1);
-    int mid = this->interval->start+len/2;
-    this->interval->start = std::max(1,mid-new_len);
-    this->interval->end = this->interval->start+new_len;
-}
-
-
-void X11Browser::goLeft(double factor) {
-    int len  = this->interval->length();
-    int dlen= std::max(1,(int)(len*factor));
-    this->interval->start = std::max(1,this->interval->start - dlen);
-    this->interval->end = this->interval->start+len;
     }
 
-void X11Browser::goRight(double factor) {
-    int len  = this->interval->length();
-    int dlen= std::max(1,(int)(len*factor));
-    this->interval->start =  this->interval->start + dlen;
-    this->interval->end = this->interval->start+len;
+
+
+void X11Browser::doMove(double factor) {
+    const int len  = this->interval->length();
+    int dlen= len*abs(factor);
+    if(dlen<1) dlen=1;
+    int x=  this->interval->start + (factor<0.0?-1:1)*dlen;
+    if(x<1) x=1;
+    cerr << "##move " << factor << " from " <<  this->interval->start << "-" << this->interval->end << " to " << x << "-" << (x+len-1) << endl;
+    this->interval->start = x;
+    this->interval->end = x + len -1;
     }
+
 
 int X11Browser::doWork(int argc,char** argv) {
 	int id_generator = 0;
@@ -915,19 +912,19 @@ int X11Browser::doWork(int argc,char** argv) {
 		    repaint();
 		    }
 		else if(actionZoomIn->match(evt)) {
-		    zoomIn();
+		    doZoom(0.66);
 		    repaint();
 		    }
 		else if(actionZoomOut->match(evt)) {
-		    zoomOut();
+		    doZoom(1.3);
 		    repaint();
 		    }
 		else if(actionMoveLeft->match(evt)) {
-		    goLeft(0.3);
+		    doMove(-0.3);
 		    repaint();
 		    }
 		else if(actionMoveRight->match(evt)) {
-		    goRight(0.3);
+		    doMove( 0.3);
 		    repaint();
 		    }
 		else if(actionShowClip->match(evt)) {
@@ -969,8 +966,8 @@ int X11Browser::doWork(int argc,char** argv) {
 			std::string title2 =os2.str();
 
 			unique_ptr<Graphics> g(actionExportPS->match(evt)?
-				new PSGraphics(title.c_str(),window_width,window_height):
-				new SVGraphics(title.c_str(),title2.c_str(),window_width,window_height)
+				(Graphics*)new PSGraphics(title.c_str(),window_width,window_height):
+				(Graphics*)new SVGraphics(title.c_str(),title2.c_str(),window_width,window_height)
 				);
 			paint(*g);
 			}
@@ -983,6 +980,38 @@ int X11Browser::doWork(int argc,char** argv) {
 	disposeWindow();
 	return EXIT_SUCCESS;
 	}
+
+
+int PairOrReads::getStart() const{
+    int i = this->owner->getStart(first);
+    if( this->second!=0 ) {
+	assert(strcmp(first->getReadName(),second->getReadName())==0);
+	i=std::min(i,this->owner->getStart(second));
+	assert(i>0);
+	}
+    else if(this->first->hasMateMappedOnSameReference())
+	{
+	int j = this->first->getMateAlignmentStart();
+   	if(j>0) i= std::min(i,j);
+	}
+    return i;
+    }
+
+int PairOrReads::getEnd() const {
+    int i =  this->owner->getEnd(first);
+    if(second!=0 ) {
+	assert(strcmp(first->getReadName(),second->getReadName())==0);
+	i=std::max(i, this->owner->getEnd(second));
+	assert(i>0);
+	}
+    else if(this->first->hasMateMappedOnSameReference())
+   	{
+   	int j = this->first->getMateAlignmentStart();//TODO use 'MC:Z'
+   	if(j>0) i= std::min(i,j);
+   	}
+    return i;
+    }
+
 
 int main_browser(int argc,char** argv) {
     X11Browser app;

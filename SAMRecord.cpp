@@ -1,3 +1,5 @@
+
+#include <cstring>
 #include "SAMRecord.hh"
 #include "macros.hh"
 
@@ -75,25 +77,26 @@ Cigar::Cigar(const bam1_t *b) {
 		}
 	}
 
-	Cigar::Cigar(const char *s) {
-		ASSERT_NOT_NULL(s);
-		size_t i = 0;
-		while(s[i]!=0) {
-			int len=0;
-			while(isdit(s[i])) {
-				len = len*10 + ((int)s[i]-(int)'0');
-				i++;
-				}
-			assert(len>0);
-			assert(s[i]!=0);
-			CigarElement ce(
-				CigarOperator::valueOf(s[i]),
-				len
-				);
-			this->elements.push_back(ce);
-			i++;
-			}
+Cigar::Cigar(const char *s) {
+	ASSERT_NOT_NULL(s);
+	if(std::strcmp(s,"*")==0) FATAL("cannot handle cigar string '*'");
+	size_t i = 0;
+	while(s[i]!=0) {
+		int len=0;
+		while(isdigit(s[i])) {
+		    len = len*10 + ((int)s[i]-(int)'0');
+		    i++;
+		    }
+		assert(len>0);
+		assert(s[i]!=0);
+		CigarElement ce(
+			CigarOperator::valueOf(s[i]),
+			len
+			);
+		this->elements.push_back(ce);
+		i++;
 		}
+	}
 
 int Cigar::size() {
 	return elements.size();
@@ -137,6 +140,81 @@ CigarElement& Cigar::at(int i)
     }
 
 
+#define CASE_INT(c,t) \
+	case  c: \
+	    this->t##_v = *(t##_t*)s;\
+	    s += sizeof(t##_t);\
+	    return true
+#define float_t float
+#define double_t double
+#define char_t char
+
+class AuxIterator
+{
+private:
+	const SAMRecord* owner;
+	const bam1_core_t *c;
+	uint8_t* s;
+public:
+	char key[3];
+	char type;
+	char char_v;
+	uint8_t uint8_v;
+	int8_t int8_v;
+	uint16_t uint16_v;
+	int16_t int16_v;
+	uint32_t uint32_v;
+	int32_t int32_v;
+	float_t float_v;
+	double_t double_v;
+	std::string string_v;
+
+	AuxIterator(const SAMRecord* rec):owner(rec),c(&(rec->b->core)),s(0) {
+	    s = (uint8_t*)bam_get_aux(rec->b);
+	    key[2]=0;
+	    type =0;
+	    char_v=0;
+	    int8_v=0;uint8_v=0;
+	    int16_v=0;uint16_v=0;
+	    int32_v=0;uint32_v=0;
+	    float_v=0;
+	    double_v=0;
+	    }
+
+	bool next() {
+	    if(!(s+4 <= owner->b->data + owner->b->l_data)) return false;
+	    string_v.clear();
+	    this->key[0] = s[0];
+	    this->key[1] = s[1];
+	    this->key[2] = 0;
+	    s+=2;
+	    this->type = *s;
+	    s++;
+	    switch(this->type) {
+		CASE_INT('a',char);
+		CASE_INT('c',int8);
+		CASE_INT('C',uint8);
+		CASE_INT('s',int16);
+		CASE_INT('S',uint16);
+		CASE_INT('i',int32);
+		CASE_INT('I',uint32);
+		CASE_INT('f',float);
+		CASE_INT('d',double);
+		case 'Z': case 'H':
+		    while (s < owner->b->data + owner->b->l_data && *s) {
+			this->string_v += *s;
+			s++;
+			}
+		    return true;
+		case 'B': {
+		    //TODO !!
+		    WARN("no implemented !!");
+		    return false;
+		    }
+		}
+	    return false;
+	    }
+	};
 
 SAMRecord::SAMRecord(const bam_hdr_t *header, bam1_t *b,bool clone):
 	_clone(clone),
@@ -144,7 +222,10 @@ SAMRecord::SAMRecord(const bam_hdr_t *header, bam1_t *b,bool clone):
 	mAlignmentEnd(NO_ALIGNMENT_START),
 	header(header),b(0)
 	{
+	ASSERT_NOT_NULL(b);
+	ASSERT_NOT_NULL(header);
 	this->b= _clone ?  ::bam_dup1(b) : b;
+	ASSERT_NOT_NULL(this->b);
 	}
 
 SAMRecord::~SAMRecord() {
@@ -152,12 +233,12 @@ SAMRecord::~SAMRecord() {
 	if(_clone) ::bam_destroy1(this->b);
 	}
 
-bam1_core_t* SAMRecord::cor() {
+const bam1_core_t* SAMRecord::cor() const {
 	return &(this->b->core);
 	}
 
 int SAMRecord::getFlag() const {
-	return const_cast<SAMRecord*>(this)->cor()->flag;
+	return cor()->flag;
 	}
 bool SAMRecord::hasFlag(int flg) const {
 	return getFlag() & flg;
@@ -202,24 +283,31 @@ Cigar* SAMRecord::getCigar() {
 	if(_cigar==NULL) _cigar=new Cigar(b);
 	return _cigar;
 	}
-int SAMRecord::getReferenceIndex() {
+int SAMRecord::getReferenceIndex() const {
 	return cor()->tid;
 	}
 const char* SAMRecord::getReferenceName() {
 	int i = getReferenceIndex();
 	return i<0 ? 0 : header->target_name[i];
 	}
-int SAMRecord::getMateReferenceIndex() {
+int SAMRecord::getMateReferenceIndex() const {
 	return cor()->mtid;
 	}
 const char* SAMRecord::getMateReferenceName() {
 	int i = getMateReferenceIndex();
 	return i<0 ? 0 : header->target_name[i];
 	}
-int SAMRecord::getAlignmentStart() {
+int SAMRecord::getAlignmentStart() const {
 	if(isReadUnmapped()) return NO_ALIGNMENT_START;
 	return cor()->pos+1;
 	}
+
+int SAMRecord::getMateAlignmentStart() const {
+	if(!isPaired()) return NO_ALIGNMENT_START;
+	if(isMateUnmapped()) return NO_ALIGNMENT_START;
+	return cor()->mpos+1;
+	}
+
 int SAMRecord::getStart() const{
 	return (const_cast<SAMRecord*>(this))->getAlignmentStart();
 	}
@@ -276,159 +364,61 @@ int SAMRecord::getReadNameLength() {
     return cor()->l_qname;
     }
 
-bool SAMRecord::hasAttribute(const char* s) const_cast
- {
-	 AuxIterator iter(this);
-	 while(iter.next()) {
-		 if(strcmp(iter.key,s)==0) return true;
+bool SAMRecord::hasAttribute(const char* att_name) const
+    {
+     AuxIterator iter(this);
+     while(iter.next()) {
+	 if(strcmp(iter.key,att_name)==0) return true;
 	 }
-	 return false;
- }
+     return false;
+    }
 
  shared_ptr<string> SAMRecord::getMateCigarString() const {
  	return getStringAttribute("MC");
  }
 
 
-shared_ptr<Cigar> SAMRecord::getMateCigar() const
-{
-	shared_ptr<Cigar> ret;
-	shared_ptr<string> cigar_str=getMateCigarString();
-	if(!cigar_str) return ret;
-	ret.reset(new Cigar(cigar_str->c_str()));
-	return ret;
-}
+shared_ptr<Cigar> SAMRecord::getMateCigar() const {
+    shared_ptr<Cigar> ret;
+    shared_ptr<string> cigar_str=getMateCigarString();
+    if(!cigar_str) return ret;
+    ret.reset(new Cigar(cigar_str->c_str()));
+    return ret;
+    }
 
- shared_ptr<string> SAMRecord::getStringAttribute(const char* s) const_cast
-  {
+ shared_ptr<string> SAMRecord::getStringAttribute(const char* s) const {
 	 shared_ptr<string> ret;
  	 AuxIterator iter(this);
  	 while(iter.next()) {
- 		 if(strcmp(iter.key,s)!=0) continue;
-		 ret.reset(new string(key->s_val));
+		 if(iter.type!='Z') continue;
+		 if(strcmp(iter.key,s)!=0) continue;
+		 ret.reset(new string(iter.string_v));
 		 break;
 		 }
  	 return ret;
-  }
-
-int SAMRecord::getMateAlignmentEnd() const_cast
-	 {
-		if(!isPaired()) return NO_ALIGNMENT_START;
-    if(isMateUnmapped()) return NO_ALIGNMENT_START; 
-		shared_ptr<Cigar> cig = this->getMateCigar();
-		if(!cig) return NO_ALIGNMENT_START;
-
-		AuxIterator iter(this);
-		while(iter.next()) {
-			if(strcmp(iter.key,s)!=0) continue;
-			ret.reset(new string(key->s_val));
-			break;
-			}
-		return ret;
 	 }
 
-class AuxIterator
-{
-public:
-	uint8_t* s;
-	code* b;
-	char key[3];
-	AuxIterator(const SAMRecord* rec):s(bam_get_aux(b)) {
-   key[2]=0;
+int SAMRecord::getMateAlignmentEnd() const {
+	if(!isPaired()) return NO_ALIGNMENT_START;
+	if(isMateUnmapped()) return NO_ALIGNMENT_START;
+	shared_ptr<Cigar> cig = this->getMateCigar();
+	if(!cig) return NO_ALIGNMENT_START;
+	int p= this->getMateAlignmentStart();
+	if(p==NO_ALIGNMENT_START) return p;
+	return  p + cig->getReferenceLength() - 1;
 	}
-	bool hasNext() {
-		return ;
-	}
-	bool next() {
-		std::shared_ptr<AuxKeyValue> ret;
-		if(!(s+4 <= b->data + b->l_data)) return false;
 
-		this->key[0] = s[0];
-		this->key[1] = s[1];
-		this->key[2] = 0;
-		s+-2;
-		this->type = *s;
-		s++;
-		switch(ret->type)
-		case 'A':
-						ret->c = *s;
-						++s;
-						break;
-		case 'C':
-						ret->d = *s;
-						++s;
-						break;
-		case 'c': {
-						//kputsn("i:", 2, str);
-						//kputw(*(int8_t*)s, str);
-						++s;
-				} else if (type == 'S') {
-						if (s+2 <= b->data + b->l_data) {
-								//kputsn("i:", 2, str);
-								//kputw(*(uint16_t*)s, str);
-								s += 2;
-						} else return -1;
-				} else if (type == 's') {
-						if (s+2 <= b->data + b->l_data) {
-								//kputsn("i:", 2, str);
-								//kputw(*(int16_t*)s, str);
-								s += 2;
-						} else return -1;
-				} else if (type == 'I') {
-						if (s+4 <= b->data + b->l_data) {
-								//kputsn("i:", 2, str);
-								//kputuw(*(uint32_t*)s, str);
-								s += 4;
-						} else return -1;
-				} else if (type == 'i') {
-						if (s+4 <= b->data + b->l_data) {
-								//kputsn("i:", 2, str);
-								//kputw(*(int32_t*)s, str);
-								s += 4;
-						} else return -1;
-				} else if (type == 'f') {
-						if (s+4 <= b->data + b->l_data) {
-								//ksprintf(str, "f:%g", *(float*)s);
-								s += 4;
-						} else return -1;
+int SAMRecord::getMateAlignmentEndThenStart() const {
+    int n = getMateAlignmentEnd();
+    return (n == NO_ALIGNMENT_START ?
+	getMateAlignmentStart():
+	n
+	);
+    }
+bool SAMRecord::hasMateMappedOnSameReference() const {
+    if(this->isReadUnmapped()) return false;
+    if(!isPaired()) return false;
+    if(this->isMateUnmapped()) return false;
+    return this->getReferenceIndex() == this->getMateReferenceIndex();
+    }
 
-				} else if (type == 'd') {
-						if (s+8 <= b->data + b->l_data) {
-								//ksprintf(str, "d:%g", *(double*)s);
-								s += 8;
-						} else return -1;
-				} else if (type == 'Z' || type == 'H') {
-					  std::string value;
-
-						//kputc(type, str); kputc(':', str);
-						while (s < b->data + b->l_data && *s) {
-							kputc(*s++, str);
-							s++;
-						}
-						if (s >= b->data + b->l_data)
-								return -1;
-						if(visitor.()) break;
-						++s;
-				} else if (type == 'B') {
-						uint8_t sub_type = *(s++);
-						int sub_type_size = aux_type2size(sub_type);
-						uint32_t n;
-						if (sub_type_size == 0 || b->data + b->l_data - s < 4)
-								return -1;
-						memcpy(&n, s, 4);
-						s += 4; // now points to the start of the array
-						if ((b->data + b->l_data - s) / sub_type_size < n)
-								return -1;
-						kputsn("B:", 2, str); kputc(sub_type, str); // write the typing
-						for (i = 0; i < n; ++i) { // FIXME: for better performance, put the loop after "if"
-								kputc(',', str);
-								if ('c' == sub_type)      { kputw(*(int8_t*)s, str); ++s; }
-								else if ('C' == sub_type) { kputw(*(uint8_t*)s, str); ++s; }
-								else if ('s' == sub_type) { kputw(*(int16_t*)s, str); s += 2; }
-								else if ('S' == sub_type) { kputw(*(uint16_t*)s, str); s += 2; }
-								else if ('i' == sub_type) { kputw(*(int32_t*)s, str); s += 4; }
-								else if ('I' == sub_type) { kputuw(*(uint32_t*)s, str); s += 4; }
-								else if ('f' == sub_type) { ksprintf(str, "%g", *(float*)s); s += 4; }
-								else return -1;
-						}
-				}

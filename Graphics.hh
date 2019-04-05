@@ -83,12 +83,16 @@ class SVGraphics :public Graphics
 		virtual void fillPolygon(size_t n,double* x,double* y);
 	};
 
-class Nullraphics :public Graphics
+class NullGraphics :public Graphics
     {
     public:
-	Nullraphics();
-	virtual ~Nullraphics();
-
+	NullGraphics();
+	virtual ~NullGraphics();
+	virtual void setColor(int r,int g,int b);
+	virtual void drawLine(double x1,double y1,double x2,double y2);
+	virtual void drawRect(double x,double y,double width,double height);
+	virtual void fillRect(double x,double y,double width,double height);
+	virtual void fillPolygon(size_t n,double* x,double* y);
     };
 
 #endif

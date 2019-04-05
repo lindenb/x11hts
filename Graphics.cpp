@@ -338,9 +338,19 @@ void SVGraphics::drawText( const char* s, double x, double y, double width, doub
 #undef SVG_ATT
 
 /* ================================================================================== */
-Nullraphics::Nullraphics() {
+NullGraphics::NullGraphics() {
 }
 
-Nullraphics::~Nullraphics() {
+NullGraphics::~NullGraphics() {
 }
 
+void NullGraphics::setColor(int r,int g,int b) {
+}
+void NullGraphics::drawLine(double x1,double y1,double x2,double y2) {
+}
+void NullGraphics::drawRect(double x,double y,double width,double height) {
+}
+void NullGraphics::fillRect(double x,double y,double width,double height) {
+}
+void NullGraphics::fillPolygon(size_t n,double* x,double* y) {
+}
