@@ -83,4 +83,12 @@ class SVGraphics :public Graphics
 		virtual void fillPolygon(size_t n,double* x,double* y);
 	};
 
+class Nullraphics :public Graphics
+    {
+    public:
+	Nullraphics();
+	virtual ~Nullraphics();
+
+    };
+
 #endif

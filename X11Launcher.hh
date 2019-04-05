@@ -33,30 +33,42 @@ THE SOFTWARE.
 #include "AbstractCmdLine.hh"
 
 
-class Action
-{
-public:
-	KeySym keysim;
-	std::function<void ()> fun;
-};
+
+#define XKEY_STR(a) a,#a
 
 class X11Launcher:public AbstractCmd
 	{
 	public:
+		class KeyAction
+		    {
+		    public:
+			    X11Launcher* owner;
+			    KeySym keysim;
+			    std::string keydef;
+			    std::string description;
+			    KeyAction( X11Launcher* owner,KeySym keysim,const char* keydef,const char* description);
+			    bool match(const XEvent& evt) const;
+		    };
+
+
 		Display *display;
 		Screen *screen;
 		int screen_number;
 		Window window;
 		int window_width;
 		int window_height;
-		std::map<KeyCode,Action> actionMap;
 
 		X11Launcher();
 		virtual ~X11Launcher();
+		virtual void usage(std::ostream& out);
+		virtual void key_usage(std::ostream& out);
 		virtual void resized();
 		virtual void repaint()=0;
 		virtual void createWindow();
 		virtual void disposeWindow();
+	protected:
+		KeyAction* createKeyAction( KeySym keysim,const char* keydef,const char* description);
+		std::vector<KeyAction*> all_key_actions;
 	};
 
 #endif

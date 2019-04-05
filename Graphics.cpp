@@ -338,5 +338,9 @@ void SVGraphics::drawText( const char* s, double x, double y, double width, doub
 #undef SVG_ATT
 
 /* ================================================================================== */
+Nullraphics::Nullraphics() {
+}
 
+Nullraphics::~Nullraphics() {
+}
 

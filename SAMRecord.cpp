@@ -136,35 +136,44 @@ bam1_core_t* SAMRecord::cor() {
 	return &(this->b->core);
 	}
 
-int SAMRecord::getFlag() {
-	return cor()->flag;
+int SAMRecord::getFlag() const {
+	return const_cast<SAMRecord*>(this)->cor()->flag;
 	}
-bool SAMRecord::hasFlag(int flg) {
+bool SAMRecord::hasFlag(int flg) const {
 	return getFlag() & flg;
 	}
-bool SAMRecord::isPaired() {
+bool SAMRecord::isPaired() const  {
 	return hasFlag(BAM_FPAIRED);
 	}
-bool SAMRecord::isReadUnmapped() {
+bool SAMRecord::isReadUnmapped() const {
 	return hasFlag(BAM_FMUNMAP);
 	}
-bool SAMRecord::isMateUnmapped() {
+bool SAMRecord::isMateUnmapped() const {
 	return hasFlag(BAM_FMUNMAP);
 	}
-bool SAMRecord::isReverseStrand() {
+bool SAMRecord::isReverseStrand() const {
 	return hasFlag(BAM_FREVERSE);
 	}
-bool SAMRecord::isMateReverseStrand() {
+bool SAMRecord::isMateReverseStrand() const {
 	return hasFlag(BAM_FMREVERSE);
 	}
-bool SAMRecord::isFirstInPair() {
+bool SAMRecord::isFirstInPair() const {
 	return hasFlag(BAM_FREAD1);
 	}
-bool SAMRecord::isSecondInPair() {
+bool SAMRecord::isSecondInPair() const {
 	return hasFlag(BAM_FREAD2);
 	}
+bool SAMRecord::isSecondaryAlignment() const {
+	return hasFlag(BAM_FSECONDARY);
+	}
+bool SAMRecord::isSupplementaryAlignment() const {
+	return hasFlag(BAM_FSUPPLEMENTARY);
+	}
+bool SAMRecord::isSecondaryOrSupplementaryAlignment() const {
+    return isSecondaryAlignment() || isSupplementaryAlignment();
+    }
 
-bool SAMRecord::isProperPair() {
+bool SAMRecord::isProperPair() const {
 	return hasFlag(BAM_FPROPER_PAIR);
 	}
 

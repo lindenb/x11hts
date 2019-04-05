@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 */
+#include <memory>
 #include <map>
 #include <sstream>
 #include <cmath>
@@ -83,7 +84,7 @@ class BrowserInterval:public Locatable
 	}
     };
 
-class PairOrReads
+class PairOrReads:public Locatable
 	{
 	public:
 		X11Browser* owner;
@@ -101,20 +102,24 @@ class PairOrReads
 			delete first;
 			if(second!=0) delete second;
 		}
+
+		const char* getContig() const {
+		    return first->getContig();
+		    }
 		int getStart() const{
-			int i = first->getUnclippedStart();
+			int i = this->owner->getStart(first);
 			if(second!=0 ) {
-				i=std::min(i,second->getUnclippedStart());
+				i=std::min(i,this->owner->getStart(second));
 			}
 			return i;
 		}
 		int getEnd() const {
-			int i = first->getUnclippedEnd();
+			int i =  this->owner->getEnd(first);
 			if(second!=0 ) {
-				i=std::max(i,second->getUnclippedEnd());
+				i=std::max(i, this->owner->getEnd(second));
 			}
 			return i;
-		}
+		    }
 	};
 
 static bool compare_pairs(const PairOrReads* p1,const PairOrReads* p2) {
@@ -136,6 +141,7 @@ class X11Browser:public X11Launcher
 		size_t bam_index;
 		size_t interval_idx;
 		bool group_by_pair;
+		bool show_clip;
 		int show_base;
 		IndexedFastaSequence* indexedFastaSequence;
 		std::shared_ptr<std::string> reference_seq;
@@ -161,6 +167,7 @@ X11Browser::X11Browser():interval(0),
 	bam_index(0),
 	interval_idx(0),
 	group_by_pair(true),
+	show_clip(true),
 	show_base(display_base),
 	indexedFastaSequence(0)
     {
@@ -186,6 +193,10 @@ X11Browser::X11Browser():interval(0),
     opt->arg("ref.fasta");
     options.push_back(opt);
 
+    opt= new Option('D',true,"Export directory; Where to save screenshots.");
+    opt->arg("directory");
+    options.push_back(opt);
+
     }
 
 X11Browser::~X11Browser() {
@@ -200,11 +211,17 @@ X11Browser::~X11Browser() {
 }
 
 int X11Browser::getStart( SAMRecord* rec) {
-    return rec->getAlignmentStart();
+    return this->show_clip?
+	    rec->getUnclippedStart():
+	    rec->getAlignmentStart()
+	    ;
 }
 int X11Browser::getEnd( SAMRecord* rec) {
-    return rec->getAlignmentEnd();
-}
+    return this->show_clip?
+	    rec->getUnclippedEnd():
+	    rec->getAlignmentEnd()
+	    ;
+    }
 
 double X11Browser::distance2pixel(int genomic_len)
     {
@@ -303,9 +320,9 @@ void X11Browser::paint() {
     //paint(g2);
     }
 
-void X11Browser::paint(Graphics& g) {
-    g.setColorName("white");
-    g.fillRect(0, 0, this->window_width, this->window_height);
+void X11Browser::paint(Graphics& graphics) {
+    graphics.setColorName("white");
+    graphics.fillRect(0, 0, this->window_width, this->window_height);
     double y=0;
     double font_size = 7;
     /* title */
@@ -326,8 +343,8 @@ void X11Browser::paint(Graphics& g) {
 
 	double height=font_size+2;
 	double width = std::min(this->window_width,(int)(font_size*title.length()));
-	g.setGray(0.3);
-	g.drawText(title.c_str(),
+	graphics.setGray(0.3);
+	graphics.drawText(title.c_str(),
 		this->window_width/2.0-width/2.0,
 		y+1,
 		width,
@@ -335,7 +352,7 @@ void X11Browser::paint(Graphics& g) {
 		);
 	y+=height;
 
-	g.drawLine(0, y, this->window_width,y);
+	graphics.drawLine(0, y, this->window_width,y);
 	}
     /* ruler label */
     {
@@ -343,13 +360,13 @@ void X11Browser::paint(Graphics& g) {
     int prev_pos=interval->start;
     int x = 0;
     double height=font_size+2;
-    g.setGray(0.3);
+    graphics.setGray(0.3);
     while(x<=this->window_width)  {
 	if(pixel2pos(x)<=prev_pos) {++x;continue;}
 	string label(Utils::niceInt(pixel2pos(x)));
 	double width = label.size()*font_size ;
 	if(x+width > this->window_width) break;
-	g.drawText(
+	graphics.drawText(
 	    label.c_str(),
 	    x+1,
 	    y+1,
@@ -361,10 +378,10 @@ void X11Browser::paint(Graphics& g) {
 	x+=width+font_size;
 	}
     for(auto lx:verticals) {
-	g.drawLine(lx, y, lx, this->window_height-y);
+	graphics.drawLine(lx, y, lx, this->window_height-y);
 	}
     y+=height;
-    g.drawLine(0, y, this->window_width,y);
+    graphics.drawLine(0, y, this->window_width,y);
     }
     /* reference */
     if(this->reference_seq)
@@ -381,12 +398,12 @@ void X11Browser::paint(Graphics& g) {
 		     }
 
 		 double w= min(font_size,onebase);
-		 g.setColorForBase(base);
-		 g.drawChar(base,pos2pixel(p)+onebase/2.0-w/2.0, y, w,font_size);
+		 graphics.setColorForBase(base);
+		 graphics.drawChar(base,pos2pixel(p)+onebase/2.0-w/2.0, y, w,font_size);
 		 p++;
 		 }
 	    y+=font_size;
-	    g.drawLine(0, y, this->window_width,y);
+	    graphics.drawLine(0, y, this->window_width,y);
 	    y++;
 	    }
 	}
@@ -398,12 +415,19 @@ void X11Browser::paint(Graphics& g) {
     double bottom_depth=y+depth_height;
     y=bottom_depth+1;
 
+    Nullraphics nullg;
+
+
     /** each row */
     double feature_height= std::max(10.0,std::min(30.0,distance2pixel(1)));
     for(size_t y_row=0;y_row< rows.size() && y< this->window_height ;++y_row) {
 	double top_row_y = y;
 	double midy= top_row_y + feature_height /2.0;
 	vector<PairOrReads*>* row=rows[y_row];
+	bool row_visible = true;
+
+	Graphics& g=(row_visible?graphics:nullg);
+
 	/** all elements on this row */
 	for(size_t por_idx=0;por_idx<row->size();++por_idx) {
 	    PairOrReads* por = row->at(por_idx);
@@ -435,11 +459,13 @@ void X11Browser::paint(Graphics& g) {
 		for(int cigar_index=0;cigar_index < cigar->size();cigar_index++) {
 		    CigarElement& ce = cigar->at(cigar_index);
 		    int arrow= NO_ARROW;
-		    if(rec->isReverseStrand() && cigar_index==0)
+
+		    /* shall we draw an arrow ? */
+		    if(rec->isReverseStrand() && cigar_index==0 && this->show_clip )
 			{
 			arrow  = ARROW_LEFT;
 			}
-		    else  if(!rec->isReverseStrand() && cigar_index+1==cigar->size())
+		    else  if(!rec->isReverseStrand() && cigar_index+1==cigar->size() && this->show_clip)
 			{
 			arrow  = ARROW_RIGHT;
 			}
@@ -464,11 +490,14 @@ void X11Browser::paint(Graphics& g) {
 			case '=':
 			case 'M':
 			    {
-			    bool bad_read = false;
-			    if(rec->isPaired()){
-				if(rec->isMateUnmapped()) bad_read=true;
-				else if(!rec->isProperPair()) bad_read=true;
+			    /* don't print clip */
+			    if(!show_clip && ce.op->isClipping()) {
+				refPos+=ce.len;
+				if(ce.op->op!='H') readPos+=ce.len;
+				break;
 				}
+
+
 
 			    char const * fill;
 			    char const * stroke;
@@ -592,7 +621,7 @@ void X11Browser::paint(Graphics& g) {
 	    x_array[2+i]=i;
 	    y_array[2+i]= bottom_depth - depth_height*( v/(double)max_cov);
 	    }
-	g.fillPolygon(2+this->window_width, x_array, y_array);
+	graphics.fillPolygon(2+this->window_width, x_array, y_array);
 	delete[] x_array;
 	delete[] y_array;
 	}
@@ -625,7 +654,8 @@ void X11Browser::repaint() {
 	if(tid>=0) {
 		int ret;
 		bam1_t *b = ::bam_init1();
-		int extend=200;
+		int extend=this->show_clip?500:0;
+
 		hts_itr_t *iter = ::sam_itr_queryi(bam->idx, tid,
 				std::max(1,interval->start- extend),
 				interval->end+extend
@@ -633,19 +663,29 @@ void X11Browser::repaint() {
 		while ((ret = bam_itr_next(bam->fp, iter, b)) >= 0)
 			{
 			SAMRecord* rec = new SAMRecord(bam->hdr,b,true);
-			if(rec->isReadUnmapped() ||
-				rec->getReferenceIndex()!=tid ||
-					getStart(rec) > interval->end ||
-					getEnd(rec)< interval->start)
-				{
-				delete rec;
-				continue;
-				}
+			if(rec->isReadUnmapped() || rec->getReferenceIndex()!=tid)
+			    {
+			    delete rec;
+			    continue;
+			    }
+
 			if(!group_by_pair)
-				{
-				all_pairs.push_back(new PairOrReads(this,rec));
+			    {
+			    PairOrReads* po= new PairOrReads(this,rec);
+			    if(!po->overlaps(interval)) {
+				delete po;
 				continue;
 				}
+			    all_pairs.push_back(po);
+			    continue;
+			    }
+
+			if(rec->isSecondaryOrSupplementaryAlignment())
+			    {
+			    delete rec;
+			    continue;
+			    }
+
 			string read_name(rec->getReadName());
 			map<string,PairOrReads*>::iterator iter= name2pair.find(read_name);
 			if(iter==name2pair.end()) {
@@ -658,7 +698,7 @@ void X11Browser::repaint() {
 				}
 			else
 				{
-				cerr << "duplicate read name " << read_name << endl;
+				WARN("duplicate read name " << read_name );
 				delete rec;
 				}
 			}
@@ -727,8 +767,25 @@ void X11Browser::goRight(double factor) {
     this->interval->end = this->interval->start+len;
     }
 
-int X11Browser::doWork(int argc,char** argv)
-	{
+int X11Browser::doWork(int argc,char** argv) {
+	int id_generator = 0;
+	const KeyAction* actionQuit = createKeyAction(XKEY_STR(XK_Q), "Exit.");
+	const KeyAction* actionEscape = createKeyAction(XKEY_STR(XK_Escape), "Exit.");
+	const KeyAction* actionNextInterval = createKeyAction(XKEY_STR(XK_L), "Move to next interval.");
+	const KeyAction* actionPrevInterval = createKeyAction(XKEY_STR(XK_H), "Move to previous interval.");
+	const KeyAction* actionNextBam = createKeyAction(XKEY_STR(XK_J), "Move to next bam.");
+	const KeyAction* actionPrevBam = createKeyAction(XKEY_STR(XK_K), "Move to previous bam.");
+	const KeyAction* actionZoomIn = createKeyAction(XKEY_STR(XK_plus), "Zoom In");
+	const KeyAction* actionZoomOut = createKeyAction(XKEY_STR(XK_minus), "Zoom Out");
+	const KeyAction* actionMoveLeft = createKeyAction(XKEY_STR(XK_Left), "Move left");
+	const KeyAction* actionMoveRight = createKeyAction(XKEY_STR(XK_Right), "Move Right");
+	const KeyAction* actionShowBase = createKeyAction(XKEY_STR(XK_B), "Toggle: Show Base/ No Base / Read Name");
+	const KeyAction* actionExportPS = createKeyAction(XKEY_STR(XK_P), "Export current view to Postscript");
+	const KeyAction* actionExportSVG = createKeyAction(XKEY_STR(XK_S), "Export current view to SVG");
+	const KeyAction* actionShowClip = createKeyAction(XKEY_STR(XK_C), "Show/Hide clip");
+	const KeyAction* actionGroupByPair = createKeyAction(XKEY_STR(XK_G), "Group by pair");
+
+	char* export_dir = NULL;
 	char* bam_list = NULL;
 	char* region_list = NULL;
 	char* reference_fasta_file = NULL;
@@ -756,6 +813,9 @@ int X11Browser::doWork(int argc,char** argv)
 		case 'R':
 			reference_fasta_file = optarg;
 			break;
+		case 'D':
+		    export_dir = optarg;
+		    break;
 		case '?':
 			cerr << "unknown option -"<< (char)optopt << endl;
 			return EXIT_FAILURE;
@@ -833,70 +893,92 @@ int X11Browser::doWork(int argc,char** argv)
 	bool done=false;
 	while(!done) {
 		::XNextEvent(this->display, &evt);
-		if(evt.type ==  KeyPress)
+		if(actionQuit->match(evt) || actionEscape->match(evt)) {
+		    done = true;
+		    }
+		else if(actionPrevBam->match(evt)) {
+		    bam_index = (bam_index==0UL?bams.size()-1:bam_index-1);
+		    repaint();
+		    }
+		else if(actionNextBam->match(evt)) {
+		    bam_index = (bam_index+1>=bams.size()?0:bam_index+1);
+		    repaint();
+		    }
+		else if(actionPrevInterval->match(evt)) {
+		    interval_idx = (interval_idx==0UL?intervals.size()-1:interval_idx-1);
+		    this->interval->assign(this->intervals.at(interval_idx));
+		    repaint();
+		    }
+		else if(actionNextInterval->match(evt)) {
+		    interval_idx = (interval_idx+1>=intervals.size()?0:interval_idx+1);
+		    this->interval->assign(this->intervals.at(interval_idx));
+		    repaint();
+		    }
+		else if(actionZoomIn->match(evt)) {
+		    zoomIn();
+		    repaint();
+		    }
+		else if(actionZoomOut->match(evt)) {
+		    zoomOut();
+		    repaint();
+		    }
+		else if(actionMoveLeft->match(evt)) {
+		    goLeft(0.3);
+		    repaint();
+		    }
+		else if(actionMoveRight->match(evt)) {
+		    goRight(0.3);
+		    repaint();
+		    }
+		else if(actionShowClip->match(evt)) {
+		    this->show_clip = !this->show_clip;
+		    repaint();
+		    }
+		else if(actionGroupByPair->match(evt)) {
+		    this->group_by_pair = !this->group_by_pair;
+		    repaint();
+		    }
+		else if(actionShowBase->match(evt)) {
+		    switch(this->show_base)
 			{
-			if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_Q) ||
-				evt.xkey.keycode == XKeysymToKeycode(this->display, XK_Escape))
-				{
-				done = true;
-				}
-			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_Left))
-				{
-				interval_idx = (interval_idx==0UL?intervals.size()-1:interval_idx-1);
-				this->interval->assign(this->intervals.at(interval_idx));
-				repaint();
-				}
-			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_Right))
-				{
-				interval_idx = (interval_idx+1>=intervals.size()?0:interval_idx+1);
-				this->interval->assign(this->intervals.at(interval_idx));
-				repaint();
-				}
-			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_Up))
-				{
-				bam_index = (bam_index==0UL?bams.size()-1:bam_index-1);
-				repaint();
-				}
-			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_Down))
-				{
-				bam_index = (bam_index+1>=bams.size()?0:bam_index+1);
-				repaint();
-				}
-			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_plus))
-				{
-				zoomIn();
-				repaint();
-				}
-			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_minus))
-				{
-				zoomOut();
-				repaint();
-				}
-			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_A))
-				{
-				goLeft(0.3);
-				repaint();
-				}
-			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_Z))
-				{
-				goRight(0.3);
-				repaint();
-				}
-			else if (evt.xkey.keycode == XKeysymToKeycode(this->display, XK_B))
-			    {
-			    switch(this->show_base)
-				{
-				case display_base : this->show_base = display_readname;break;
-				case display_readname : this->show_base = display_none;break;
-				default: this->show_base = display_base; break;
-				}
-			    repaint();
-			    }
+			case display_base : this->show_base = display_readname;break;
+			case display_readname : this->show_base = display_none;break;
+			default: this->show_base = display_base; break;
 			}
+		    repaint();
+		    }
+		else if(actionExportPS->match(evt) || actionExportSVG->match(evt))
+		    {
+		    if(Utils::isBlank(export_dir)) {
+			WARN("export directory is not defined.");
+			}
+		    else
+			{
+			;
+			ostringstream os;
+			os << export_dir << (Utils::endsWith(export_dir,"/")?"":"/")
+			   << interval->contig<<"_" << interval->start << "_" << interval->end << "."
+			    << this->bams.at(bam_index)->getSample()
+			    << "." << (++id_generator) << "."
+			    << (actionExportPS->match(evt)?"ps":"svg");
+			std::string title =os.str();
+
+			ostringstream os2;
+			os2 << interval->contig<<"_" << interval->start << "_" << interval->end << "."
+				<< this->bams.at(bam_index)->getSample();
+			std::string title2 =os2.str();
+
+			unique_ptr<Graphics> g(actionExportPS->match(evt)?
+				new PSGraphics(title.c_str(),window_width,window_height):
+				new SVGraphics(title.c_str(),title2.c_str(),window_width,window_height)
+				);
+			paint(*g);
+			}
+		    }
 		else if(evt.type ==   Expose)
-			{
-			resized();
-			}
+		    {
+		    resized();
+		    }
 		}//end while
 	disposeWindow();
 	return EXIT_SUCCESS;
