@@ -434,12 +434,22 @@ void X11Browser::paint(Graphics& graphics) {
 		    {
 		    g.setColorName("blue");
 		    }
-		g.drawLine(
-			trimx(pos2pixel(por->getStart())),
-			midy,
-			trimx(pos2pixel(por->getEnd()+1)),
-			midy
-			);
+		double x0=trimx(pos2pixel(por->getStart()));
+		double x1=trimx(pos2pixel(por->getEnd()+1));
+		g.drawLine( x0, midy, x1, midy );
+		/* can we plot the length of the insert ? */
+
+		// enough space to draw the insert size ?
+		if(x1-x0>100) {
+		    string title = Utils::niceInt(abs(por->first->getInferredSize()));
+		    double w = std::min(title.size()*7.0,x1-x0);
+		    g.drawText(title.c_str(),
+			    x0+(x1-x0)/2.0- w/2.0,
+			    midy-3,
+			    w,
+			    7);
+		    }
+
 		}
 	    // each side of the read pair
 	    for(int side=0;side<2;++side) {
@@ -500,11 +510,11 @@ void X11Browser::paint(Graphics& graphics) {
 				ostringstream os;
 				os << Utils::niceInt(ce.len) << "bp";
 				string title = os.str();
-				g.setColorName("red");
+				g.setColorName("pink");
 				double w = std::min(title.size()*7.0,x1-x0);
 				g.drawText(title.c_str(),
 					x0+(x1-x0)/2.0- w/2.0,
-					midy+3,
+					midy-3,
 					w,
 					7);
 				}
@@ -687,7 +697,7 @@ void X11Browser::repaint() {
 	if(tid>=0) {
 		int ret;
 		bam1_t *b = ::bam_init1();
-		int extend=this->show_clip?500:0;
+		int extend=(this->show_clip||this->group_by_pair?500:0);
 
 		hts_itr_t *iter = ::sam_itr_queryi(bam->idx, tid,
 				std::max(1,interval->start- extend),
@@ -979,7 +989,6 @@ int X11Browser::doWork(int argc,char** argv) {
 			}
 		    else
 			{
-			;
 			ostringstream os;
 			os << export_dir << (Utils::endsWith(export_dir,"/")?"":"/")
 			   << interval->contig<<"_" << interval->start << "_" << interval->end << "."
@@ -1004,6 +1013,10 @@ int X11Browser::doWork(int argc,char** argv) {
 		    {
 		    resized();
 		    }
+		else  if(evt.type ==  KeyPress) {
+		    cerr << "Unknown key" << endl;
+		    key_usage(cerr);
+		}
 		}//end while
 	disposeWindow();
 	return EXIT_SUCCESS;
@@ -1012,7 +1025,7 @@ int X11Browser::doWork(int argc,char** argv) {
 
 int PairOrReads::getStart() const{
     int i = this->owner->getStart(first);
-    if(this->owner->group_by_pair)
+    if(!this->owner->group_by_pair)
     	{
     	return i;
     	}
@@ -1033,7 +1046,7 @@ int PairOrReads::getStart() const{
 
 int PairOrReads::getEnd() const {
     int i =  this->owner->getEnd(first);
-    if(this->owner->group_by_pair)
+    if(!this->owner->group_by_pair)
 	{
 	return i;
 	}
