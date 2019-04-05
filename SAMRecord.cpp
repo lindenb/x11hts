@@ -75,6 +75,26 @@ Cigar::Cigar(const bam1_t *b) {
 		}
 	}
 
+	Cigar::Cigar(const char *s) {
+		ASSERT_NOT_NULL(s);
+		size_t i = 0;
+		while(s[i]!=0) {
+			int len=0;
+			while(isdit(s[i])) {
+				len = len*10 + ((int)s[i]-(int)'0');
+				i++;
+				}
+			assert(len>0);
+			assert(s[i]!=0);
+			CigarElement ce(
+				CigarOperator::valueOf(s[i]),
+				len
+				);
+			this->elements.push_back(ce);
+			i++;
+			}
+		}
+
 int Cigar::size() {
 	return elements.size();
 	}
@@ -256,4 +276,159 @@ int SAMRecord::getReadNameLength() {
     return cor()->l_qname;
     }
 
+bool SAMRecord::hasAttribute(const char* s) const_cast
+ {
+	 AuxIterator iter(this);
+	 while(iter.next()) {
+		 if(strcmp(iter.key,s)==0) return true;
+	 }
+	 return false;
+ }
 
+ shared_ptr<string> SAMRecord::getMateCigarString() const {
+ 	return getStringAttribute("MC");
+ }
+
+
+shared_ptr<Cigar> SAMRecord::getMateCigar() const
+{
+	shared_ptr<Cigar> ret;
+	shared_ptr<string> cigar_str=getMateCigarString();
+	if(!cigar_str) return ret;
+	ret.reset(new Cigar(cigar_str->c_str()));
+	return ret;
+}
+
+ shared_ptr<string> SAMRecord::getStringAttribute(const char* s) const_cast
+  {
+	 shared_ptr<string> ret;
+ 	 AuxIterator iter(this);
+ 	 while(iter.next()) {
+ 		 if(strcmp(iter.key,s)!=0) continue;
+		 ret.reset(new string(key->s_val));
+		 break;
+		 }
+ 	 return ret;
+  }
+
+int SAMRecord::getMateAlignmentEnd() const_cast
+	 {
+		if(!isPaired()) return NO_ALIGNMENT_START;
+    if(isMateUnmapped()) return NO_ALIGNMENT_START; 
+		shared_ptr<Cigar> cig = this->getMateCigar();
+		if(!cig) return NO_ALIGNMENT_START;
+
+		AuxIterator iter(this);
+		while(iter.next()) {
+			if(strcmp(iter.key,s)!=0) continue;
+			ret.reset(new string(key->s_val));
+			break;
+			}
+		return ret;
+	 }
+
+class AuxIterator
+{
+public:
+	uint8_t* s;
+	code* b;
+	char key[3];
+	AuxIterator(const SAMRecord* rec):s(bam_get_aux(b)) {
+   key[2]=0;
+	}
+	bool hasNext() {
+		return ;
+	}
+	bool next() {
+		std::shared_ptr<AuxKeyValue> ret;
+		if(!(s+4 <= b->data + b->l_data)) return false;
+
+		this->key[0] = s[0];
+		this->key[1] = s[1];
+		this->key[2] = 0;
+		s+-2;
+		this->type = *s;
+		s++;
+		switch(ret->type)
+		case 'A':
+						ret->c = *s;
+						++s;
+						break;
+		case 'C':
+						ret->d = *s;
+						++s;
+						break;
+		case 'c': {
+						//kputsn("i:", 2, str);
+						//kputw(*(int8_t*)s, str);
+						++s;
+				} else if (type == 'S') {
+						if (s+2 <= b->data + b->l_data) {
+								//kputsn("i:", 2, str);
+								//kputw(*(uint16_t*)s, str);
+								s += 2;
+						} else return -1;
+				} else if (type == 's') {
+						if (s+2 <= b->data + b->l_data) {
+								//kputsn("i:", 2, str);
+								//kputw(*(int16_t*)s, str);
+								s += 2;
+						} else return -1;
+				} else if (type == 'I') {
+						if (s+4 <= b->data + b->l_data) {
+								//kputsn("i:", 2, str);
+								//kputuw(*(uint32_t*)s, str);
+								s += 4;
+						} else return -1;
+				} else if (type == 'i') {
+						if (s+4 <= b->data + b->l_data) {
+								//kputsn("i:", 2, str);
+								//kputw(*(int32_t*)s, str);
+								s += 4;
+						} else return -1;
+				} else if (type == 'f') {
+						if (s+4 <= b->data + b->l_data) {
+								//ksprintf(str, "f:%g", *(float*)s);
+								s += 4;
+						} else return -1;
+
+				} else if (type == 'd') {
+						if (s+8 <= b->data + b->l_data) {
+								//ksprintf(str, "d:%g", *(double*)s);
+								s += 8;
+						} else return -1;
+				} else if (type == 'Z' || type == 'H') {
+					  std::string value;
+
+						//kputc(type, str); kputc(':', str);
+						while (s < b->data + b->l_data && *s) {
+							kputc(*s++, str);
+							s++;
+						}
+						if (s >= b->data + b->l_data)
+								return -1;
+						if(visitor.()) break;
+						++s;
+				} else if (type == 'B') {
+						uint8_t sub_type = *(s++);
+						int sub_type_size = aux_type2size(sub_type);
+						uint32_t n;
+						if (sub_type_size == 0 || b->data + b->l_data - s < 4)
+								return -1;
+						memcpy(&n, s, 4);
+						s += 4; // now points to the start of the array
+						if ((b->data + b->l_data - s) / sub_type_size < n)
+								return -1;
+						kputsn("B:", 2, str); kputc(sub_type, str); // write the typing
+						for (i = 0; i < n; ++i) { // FIXME: for better performance, put the loop after "if"
+								kputc(',', str);
+								if ('c' == sub_type)      { kputw(*(int8_t*)s, str); ++s; }
+								else if ('C' == sub_type) { kputw(*(uint8_t*)s, str); ++s; }
+								else if ('s' == sub_type) { kputw(*(int16_t*)s, str); s += 2; }
+								else if ('S' == sub_type) { kputw(*(uint16_t*)s, str); s += 2; }
+								else if ('i' == sub_type) { kputw(*(int32_t*)s, str); s += 4; }
+								else if ('I' == sub_type) { kputuw(*(uint32_t*)s, str); s += 4; }
+								else if ('f' == sub_type) { ksprintf(str, "%g", *(float*)s); s += 4; }
+								else return -1;
+						}
+				}
