@@ -270,6 +270,14 @@ bool SAMRecord::isSecondaryAlignment() const {
 bool SAMRecord::isSupplementaryAlignment() const {
 	return hasFlag(BAM_FSUPPLEMENTARY);
 	}
+bool SAMRecord::isDuplicate() const {
+	return hasFlag(BAM_FDUP);
+	}
+
+bool SAMRecord::isFailingQC() const {
+	return hasFlag(BAM_FQCFAIL);
+	}
+
 bool SAMRecord::isSecondaryOrSupplementaryAlignment() const {
     return isSecondaryAlignment() || isSupplementaryAlignment();
     }

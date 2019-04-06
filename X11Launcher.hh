@@ -57,6 +57,7 @@ class X11Launcher:public AbstractCmd
 		Window window;
 		int window_width;
 		int window_height;
+		Pixmap offscreen;
 
 		X11Launcher();
 		virtual ~X11Launcher();
@@ -69,6 +70,7 @@ class X11Launcher:public AbstractCmd
 	protected:
 		KeyAction* createKeyAction( KeySym keysim,const char* keydef,const char* description);
 		std::vector<KeyAction*> all_key_actions;
+		virtual Pixmap getOffscreen();
 	};
 
 #endif

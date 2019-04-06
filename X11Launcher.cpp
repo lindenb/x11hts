@@ -7,7 +7,8 @@ X11Launcher::X11Launcher():display(0),screen(0),
 		screen_number(0),
 		window(0),
 		window_width(0),
-		window_height(0)
+		window_height(0),
+		offscreen(0)
 {
 }
 
@@ -42,8 +43,18 @@ void X11Launcher::resized() {
 	if(att.width!=this->window_width || att.height!=this->window_height) {
 		this->window_width = att.width;
 		this->window_height =  att.height;
+		if(this->offscreen != 0) XFreePixmap(display,offscreen);
+		this->offscreen = 0;
 		this->repaint();
 		}
+	}
+
+Pixmap X11Launcher::getOffscreen() {
+	if(this->offscreen==0) {
+		int depth = DefaultDepthOfScreen(this->screen);
+		this-> offscreen = XCreatePixmap(display, window,this->window_width,this->window_height, depth);
+		}
+	return offscreen;
 	}
 
 void X11Launcher::createWindow() {
@@ -70,6 +81,7 @@ void X11Launcher::createWindow() {
     }
 
 void X11Launcher::disposeWindow() {
+	if(offscreen!=0) XFreePixmap(display,offscreen);
 	::XUnmapWindow(display,window);
 	::XCloseDisplay(display);
 	display=NULL;
@@ -77,6 +89,8 @@ void X11Launcher::disposeWindow() {
 	window_height=0;
 	window_width=0;
 	}
+
+
 
 X11Launcher::KeyAction* X11Launcher::createKeyAction( KeySym keysim,const char* keydef,const char* description)
     {

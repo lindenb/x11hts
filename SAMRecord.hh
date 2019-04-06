@@ -76,6 +76,8 @@ class SAMRecord: public Locatable
 		bool isFirstInPair() const;
 		bool isSecondInPair() const;
 		bool isProperPair() const;
+		bool isDuplicate() const;
+		bool isFailingQC() const;
 		bool isSecondaryAlignment() const;
 		bool isSupplementaryAlignment() const;
 		bool isSecondaryOrSupplementaryAlignment() const;

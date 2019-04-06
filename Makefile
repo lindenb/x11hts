@@ -80,7 +80,7 @@ version.hh :
 	echo "#endif" >> $@
 
 test2: x11hts
-	find ${HOME}/src/jvarkit-git/src/test/resources/ -name "S*.bam" > jeter.bam.list
+	find ${HOME}/src/jvarkit-git/src/test/resources/ -name "S*.bam" |sort> jeter.bam.list
 	echo "RF03	1	10	POUM" > jeter.bed
 	echo "RF03	1	1000	POUM" >> jeter.bed
 	./x11hts browse -B jeter.bam.list  -r jeter.bed -R /home/lindenb/src/jvarkit-git/src/test/resources/rotavirus_rf.fa

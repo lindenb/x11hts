@@ -133,6 +133,11 @@ class X11Browser:public X11Launcher
 		int show_base;
 		IndexedFastaSequence* indexedFastaSequence;
 		std::shared_ptr<std::string> reference_seq;
+		bool hide_supplementary_reads;
+		bool hide_duplicate_reads;
+		bool hide_secondary_reads;
+		bool hide_fail_qc_reads;
+
 
 		X11Browser();
 		virtual ~X11Browser();
@@ -156,7 +161,11 @@ X11Browser::X11Browser():interval(0),
 	group_by_pair(true),
 	show_clip(true),
 	show_base(display_base),
-	indexedFastaSequence(0)
+	indexedFastaSequence(0),
+	hide_supplementary_reads(true),
+	hide_duplicate_reads(true),
+	hide_secondary_reads(true),
+	hide_fail_qc_reads(true)
     {
     interval = new BrowserInterval;
     interval->contig.assign("undef");
@@ -233,11 +242,11 @@ void X11Browser::drawArrow(
 
     double width = distance2pixel(len);
     double arrow_size = (arrow==NO_ARROW?0:5);
-    if(arrow_size > feature_height) arrow=NO_ARROW;
+    if(arrow_size > feature_height || arrow_size<= width ) arrow=NO_ARROW;
 
     if(pos2pixel(refPos) > this->window_width) return;
     if(pos2pixel(refPos+len) <0) return;
-
+	
 
     if(arrow==ARROW_LEFT)
 	{
@@ -306,10 +315,13 @@ char X11Browser::getBaseAt(SAMRecord* rec,int pos) {
     return c;
     }
 void X11Browser::paint() {
-    X11Graphics g(this->display,this->window);
+	Pixmap offscreen = getOffscreen();
+    X11Graphics g(this->display,offscreen);
+    
     paint(g);
-    //PSGraphics g2("jeter.ps",this->window_width,this->window_height);
-    //paint(g2);
+    GC stdgc=XDefaultGC(display,screen_number); // "This GC should never be freed"
+    ::XCopyArea(display, offscreen, window,stdgc, 0, 0, this->window_width, this->window_height,0, 0);
+    ::XFlush(display);
     }
 
 void X11Browser::paint(Graphics& graphics) {
@@ -412,11 +424,13 @@ void X11Browser::paint(Graphics& graphics) {
 
     /** each row */
     double feature_height= std::max(10.0,std::min(30.0,distance2pixel(1)));
-    for(size_t y_row=0;y_row< rows.size() && y< this->window_height ;++y_row) {
+    for(size_t y_row=0;y_row< rows.size() ;++y_row) {
 	double top_row_y = y;
 	double midy= top_row_y + feature_height /2.0;
+	/* current row */
 	vector<PairOrReads*>* row=rows[y_row];
-	bool row_visible = true;
+	/* we neeed to loop over all the lines even if they're not visible to calculate the depth */
+	bool row_visible = y< this->window_height;
 
 	Graphics& g=(row_visible?graphics:nullg);
 
@@ -596,7 +610,7 @@ void X11Browser::paint(Graphics& graphics) {
 
 				    if(this->reference_seq &&
 					(basepos >= this->interval->start) &&
-					(basepos - this->interval->start) < this->reference_seq->size()) {
+					(basepos - this->interval->start) < (int)this->reference_seq->size()) {
 					char ref_base = toupper(this->reference_seq->at(basepos - this->interval->start));
 					if(ref_base!='N' && nucleotide!='N' && ref_base!=nucleotide)
 					    {
@@ -706,7 +720,11 @@ void X11Browser::repaint() {
 		while ((ret = bam_itr_next(bam->fp, iter, b)) >= 0)
 			{
 			SAMRecord* rec = new SAMRecord(bam->hdr,b,true);
-			if(rec->isReadUnmapped() || rec->getReferenceIndex()!=tid)
+			if(rec->isReadUnmapped() ||
+				rec->getReferenceIndex()!=tid ||
+				(this->hide_fail_qc_reads && rec->isFailingQC()) ||
+				(this->hide_duplicate_reads && rec->isDuplicate())
+				)
 			    {
 			    delete rec;
 			    continue;
@@ -714,14 +732,27 @@ void X11Browser::repaint() {
 
 			if(!group_by_pair)
 			    {
+			    /* check flags */
+			    if(
+			    	(this->hide_supplementary_reads && rec->isSupplementaryAlignment()) ||
+			    	(this->hide_secondary_reads && rec->isSecondaryAlignment())
+			    	) {
+			    	delete rec;
+			    	continue;
+			    	}
+	
+			    
+			    
 			    PairOrReads* po= new PairOrReads(this,rec);
 			    if(!po->overlaps(interval)) {
-				delete po;
-				continue;
-				}
+					delete po;
+					continue;
+					}
 			    all_pairs.push_back(po);
 			    continue;
 			    }
+
+
 
 			if(rec->isSecondaryOrSupplementaryAlignment())
 			    {
@@ -819,6 +850,13 @@ int X11Browser::doWork(int argc,char** argv) {
 	const KeyAction* actionExportSVG = createKeyAction(XKEY_STR(XK_S), "Export current view to SVG");
 	const KeyAction* actionShowClip = createKeyAction(XKEY_STR(XK_C), "Show/Hide clip");
 	const KeyAction* actionGroupByPair = createKeyAction(XKEY_STR(XK_G), "Group by pair");
+	const KeyAction* actionHideSupplementaryReads = createKeyAction(XKEY_STR(XK_1), "Show/Hide supplementary reads (always  hide in 'group by pair'");
+	const KeyAction* actionHideSecondaryReads = createKeyAction(XKEY_STR(XK_2), "Show/Hide secondary reads (always  hide in 'group by pair'");
+	const KeyAction* actionHideDuplicateReads = createKeyAction(XKEY_STR(XK_3), "Show/Hide duplicate reads.");
+	const KeyAction* actionHideFailQCReads = createKeyAction(XKEY_STR(XK_4), "Show/Hide failing QC reads.");
+		
+#define ELSE_TOGGLE_KEY(K,B) else if(K->match(evt)) { this->B=!(this->B); repaint();}
+
 
 	char* export_dir = NULL;
 	char* bam_list = NULL;
@@ -965,14 +1003,6 @@ int X11Browser::doWork(int argc,char** argv) {
 		    doMove( 0.3);
 		    repaint();
 		    }
-		else if(actionShowClip->match(evt)) {
-		    this->show_clip = !this->show_clip;
-		    repaint();
-		    }
-		else if(actionGroupByPair->match(evt)) {
-		    this->group_by_pair = !this->group_by_pair;
-		    repaint();
-		    }
 		else if(actionShowBase->match(evt)) {
 		    switch(this->show_base)
 			{
@@ -982,6 +1012,12 @@ int X11Browser::doWork(int argc,char** argv) {
 			}
 		    repaint();
 		    }
+		ELSE_TOGGLE_KEY(actionGroupByPair,group_by_pair)
+		ELSE_TOGGLE_KEY(actionShowClip,show_clip)
+		ELSE_TOGGLE_KEY(actionHideSupplementaryReads,hide_supplementary_reads)
+		ELSE_TOGGLE_KEY(actionHideDuplicateReads,hide_duplicate_reads)
+		ELSE_TOGGLE_KEY(actionHideSecondaryReads,hide_secondary_reads)
+		ELSE_TOGGLE_KEY(actionHideFailQCReads,hide_fail_qc_reads)
 		else if(actionExportPS->match(evt) || actionExportSVG->match(evt))
 		    {
 		    if(Utils::isBlank(export_dir)) {
