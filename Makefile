@@ -7,7 +7,7 @@ CFLAGS=-Wall -std=c++11 -g
 CC=g++
 
 OBJS=X11Hts X11BamCov X11Launcher SAMRecord SAMFile AbstractCmdLine Utils SplitFastq GZipInputStreamBuf \
-	InterleavedFastq X11Browser Graphics BedLine Faidx Locatable Interval Hershey
+	InterleavedFastq X11Browser Graphics BedLine Faidx Locatable Interval Hershey KString
 
 ifeq ($(realpath $(HTSLIB)/htslib/sam.h),)
 $(error cannot find $(HTSLIB)/htslib/sam.h. Please define HTSLIB when invoking make. Something like `make HTSLIB=../htslib`)

@@ -33,13 +33,10 @@ THE SOFTWARE.
 #include <cassert>
 #include "macros.hh"
 #include "AbstractCmdLine.hh"
+#include "KString.hh"
 #include "Utils.hh"
-#include "GZipInputStreamBuf.hh"
 
 using namespace std;
-
-#define PATTERN "__SPLIT__"
-
 
 
 class InterleavedFastq:public AbstractCmd
@@ -64,6 +61,10 @@ InterleavedFastq::InterleavedFastq() {
 InterleavedFastq::~InterleavedFastq() {
 
 }
+#define MUST_READ(IN,L) \
+	if(!KString::readLine(IN, L)) FATAL("line missing in fastq " << L1 << ".")
+
+#define WRITE_LINE(L) L.write(stdout);fputc('\n',stdout)
 
 int InterleavedFastq::doWork(int argc,char** argv) {
     int opt;
@@ -101,56 +102,81 @@ int InterleavedFastq::doWork(int argc,char** argv) {
 	    cerr << "Bad arguments : modulo>=divider" << endl;
 	    return EXIT_FAILURE;
 	    }
-    string line;
-    int nline = 0;
+    KString L1;
+    KString L2;
+    KString L3;
+    KString L4;
+
+
     long nReads  = 0;
     if(optind==argc || optind+1==argc) {
 	    //single end
-	    GzipInputStreamBuf* gzbuf=
+	    gzFile in=
 		    (optind==argc?
-		       new GzipInputStreamBuf(fileno(stdin)):
-		       new GzipInputStreamBuf(argv[optind])
+		      ::gzdopen(fileno(stdin),"r"):
+		      ::gzopen(argv[optind],"r")
 		     );
-	    istream in(gzbuf);
-	    while(getline(in,line,'\n')) {
-	     if(nReads%divider==modulo) cout << line << endl;
-	     nline++;
-	     if(nline==4) {
-		   nline=0;
-		   nReads++;
-	   	   }
-	     }
-	    delete gzbuf;
+	    for(;;) {
+		if(!KString::readLine(in, L1)) break;
+		MUST_READ(in,L2);
+		MUST_READ(in,L3);
+		MUST_READ(in,L4);
+
+		if(nReads%divider==modulo) {
+		    WRITE_LINE(L1);
+		    WRITE_LINE(L2);
+		    WRITE_LINE(L3);
+		    WRITE_LINE(L4);
+		    }
+		nReads++;
+		}
+	   gzclose(in);
+	   cout.flush();
 	  }
 	else if(optind+2==argc) {
 	    //paired end
-	    int side=0;
-	    GzipInputStreamBuf gzbuf1(argv[optind]);
-	    GzipInputStreamBuf gzbuf2(argv[optind+1]);
-	    istream in1(&gzbuf1);
-	    istream in2(&gzbuf2);
-	    while(getline(side==0?in1:in2,line,'\n')) {
-	     if(nReads%divider==modulo) cout << line << endl;
-	     nline++;
-	     if(nline==4)
-	     	{
-	     	side=1;
-	     	}
-	     else if(nline==8) {
-		   nline=0;
-		   nReads++;
-		   side=0;
-	   	   }
+	    gzFile in1 = ::gzopen(argv[optind  ],"r");
+	    gzFile in2 = ::gzopen(argv[optind+1],"r");
+	    KString L5;
+	    KString L6;
+	    KString L7;
+	    KString L8;
+
+	    for(;;) {
+		if(!KString::readLine(in1, L1)) {
+		    if(KString::readLine(in2, L5)) {
+			FATAL("extra read in "<< argv[optind+1]);
+		        }
+		    break;
+		    }
+		MUST_READ(in1,L2);
+		MUST_READ(in1,L3);
+		MUST_READ(in1,L4);
+		MUST_READ(in2,L5);
+		MUST_READ(in2,L6);
+		MUST_READ(in2,L7);
+		MUST_READ(in2,L8);
+		if(nReads%divider==modulo) {
+		    WRITE_LINE(L1);
+		    WRITE_LINE(L2);
+		    WRITE_LINE(L3);
+		    WRITE_LINE(L4);
+		    WRITE_LINE(L5);
+		    WRITE_LINE(L6);
+		    WRITE_LINE(L7);
+		    WRITE_LINE(L8);
+		    }
+	     nReads++;
 	     }
+	    gzclose(in1);
+	    gzclose(in2);
+	    cout.flush();
 	  }
     else {
     	cerr << "Illegal Number of arguments." << endl;
     	return EXIT_FAILURE;
     	}
-     if(nline!=0) {
-	   cerr << "Illegal number of reads  in input !" << endl;
-	   return EXIT_FAILURE;
-	   }
+
     return EXIT_SUCCESS;
     }
   	 	

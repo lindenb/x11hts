@@ -196,13 +196,12 @@ string Utils::escapeXml(const char* s)   {
     }
 
 std::string Utils::substring_before(const std::string& line,const char* delim) {
-string::size_type t=line.find(delim);
-if(t==string::npos) return "";
-return line.substr(0, t);
-}
-std::string substring_after(const std::string& line,const char* delim) {
-string::size_type t=line.find(delim);
-if(t==string::npos) return "";
-return line.substr(t+1);
-}
-
+    string::size_type t=line.find(delim);
+    if(t==string::npos) return "";
+    return line.substr(0, t);
+    }
+std::string Utils::substring_after(const std::string& line,const char* delim) {
+    string::size_type t=line.find(delim);
+    if(t==string::npos) return "";
+    return line.substr(t+1);
+    }
