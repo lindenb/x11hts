@@ -82,7 +82,7 @@ SAMFile* SAMFileFactory::open(const char* fn) {
 		instance->idx = ::sam_index_load(instance->fp,fn);
 		if (instance->idx==NULL) {
 			delete instance;
-			FATAL("Cannot open index for " << fn << "." );
+			FATAL("Cannot open index  for \"" << fn << "\". Make sure it was indexed with `samtools index`." );
 			}
 		}
 

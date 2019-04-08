@@ -137,6 +137,7 @@ class X11Browser:public X11Launcher
 		bool hide_duplicate_reads;
 		bool hide_secondary_reads;
 		bool hide_fail_qc_reads;
+		size_t top_row_index;
 
 
 		X11Browser();
@@ -165,7 +166,8 @@ X11Browser::X11Browser():interval(0),
 	hide_supplementary_reads(true),
 	hide_duplicate_reads(true),
 	hide_secondary_reads(true),
-	hide_fail_qc_reads(true)
+	hide_fail_qc_reads(true),
+	top_row_index(0UL)
     {
     interval = new BrowserInterval;
     interval->contig.assign("undef");
@@ -242,7 +244,8 @@ void X11Browser::drawArrow(
 
     double width = distance2pixel(len);
     double arrow_size = (arrow==NO_ARROW?0:5);
-    if(arrow_size > feature_height || arrow_size<= width ) arrow=NO_ARROW;
+    if(arrow_size > feature_height) arrow=NO_ARROW;
+    if(arrow_size>= width )  arrow=NO_ARROW;
 
     if(pos2pixel(refPos) > this->window_width) return;
     if(pos2pixel(refPos+len) <0) return;
@@ -430,7 +433,7 @@ void X11Browser::paint(Graphics& graphics) {
 	/* current row */
 	vector<PairOrReads*>* row=rows[y_row];
 	/* we neeed to loop over all the lines even if they're not visible to calculate the depth */
-	bool row_visible = y< this->window_height;
+	bool row_visible = y_row>= this->top_row_index &&  y< this->window_height;
 
 	Graphics& g=(row_visible?graphics:nullg);
 
@@ -644,7 +647,7 @@ void X11Browser::paint(Graphics& graphics) {
 
 		}
 	    }
-	    y+=feature_height+2;
+	   if(row_visible ) y+=feature_height+2;
 	}/* end for each-row */
 
     /* print depth of coverage */
@@ -735,8 +738,8 @@ void X11Browser::repaint() {
 			    /* check flags */
 			    if(
 			    	(this->hide_supplementary_reads && rec->isSupplementaryAlignment()) ||
-			    	(this->hide_secondary_reads && rec->isSecondaryAlignment())
-			    	) {
+			    	(this->hide_secondary_reads && rec->isSecondaryAlignment()) 
+				) {
 			    	delete rec;
 			    	continue;
 			    	}
@@ -748,6 +751,7 @@ void X11Browser::repaint() {
 					delete po;
 					continue;
 					}
+				
 			    all_pairs.push_back(po);
 			    continue;
 			    }
@@ -784,8 +788,19 @@ void X11Browser::repaint() {
 			iter!=name2pair.end();
 			++iter)
 		{
-		all_pairs.push_back(iter->second);
+		PairOrReads* por = iter->second;
+	
+		/*as we extend the region when fetching the reads, make sure that NOT(bot reads hidden )*/
+		if( (por->second!=NULL && getEnd(por->first) < interval->getStart() && getStart(por->second) > interval->getEnd()) ||
+		    (por->second!=NULL && getEnd(por->second) < interval->getStart() && getStart(por->first) > interval->getEnd()) 
+		   )    {
+			delete por;
+			continue;
+			}
+
+		all_pairs.push_back(por);
 		}
+
 	std::sort(all_pairs.begin(),all_pairs.end(),compare_pairs);
 	for(size_t i=0;i< all_pairs.size();++i) {
 		PairOrReads* por = all_pairs[i];
@@ -809,15 +824,16 @@ void X11Browser::repaint() {
 	}
 
 void X11Browser::doZoom(double factor) {
-    const int len  = this->interval->length();
-    if(len<=1) return;
-    int new_len= len*factor;
+    const double len  = this->interval->length();
+    if(len<=1.0) return;
+    double new_len= len*factor;
     if(new_len==len && factor>1.0) new_len=len+1;
     if(new_len==len && factor<1.0) new_len=len-1;
     if(new_len<0) return;
-    int mid = this->interval->start+len/2;
-    this->interval->start = std::max(1,mid-new_len);
-    this->interval->end = this->interval->start+new_len;
+    int mid = this->interval->start+(int)(len/2.0);
+    this->interval->end = mid + (int)(new_len/2.0);
+    this->interval->start = std::max(1,this->interval->end - (int)new_len);
+   
     }
 
 
@@ -839,6 +855,7 @@ int X11Browser::doWork(int argc,char** argv) {
 	const KeyAction* actionEscape = createKeyAction(XKEY_STR(XK_Escape), "Exit.");
 	const KeyAction* actionNextInterval = createKeyAction(XKEY_STR(XK_L), "Move to next interval.");
 	const KeyAction* actionPrevInterval = createKeyAction(XKEY_STR(XK_H), "Move to previous interval.");
+	const KeyAction* actionResetInterval = createKeyAction(XKEY_STR(XK_I), "Restore current interval.");
 	const KeyAction* actionNextBam = createKeyAction(XKEY_STR(XK_J), "Move to next bam.");
 	const KeyAction* actionPrevBam = createKeyAction(XKEY_STR(XK_K), "Move to previous bam.");
 	const KeyAction* actionZoomIn = createKeyAction(XKEY_STR(XK_plus), "Zoom In");
@@ -854,6 +871,9 @@ int X11Browser::doWork(int argc,char** argv) {
 	const KeyAction* actionHideSecondaryReads = createKeyAction(XKEY_STR(XK_2), "Show/Hide secondary reads (always  hide in 'group by pair'");
 	const KeyAction* actionHideDuplicateReads = createKeyAction(XKEY_STR(XK_3), "Show/Hide duplicate reads.");
 	const KeyAction* actionHideFailQCReads = createKeyAction(XKEY_STR(XK_4), "Show/Hide failing QC reads.");
+	const KeyAction* actionBamRowUp = createKeyAction(XKEY_STR(XK_E), "Move view up");
+	const KeyAction* actionBamRowDown = createKeyAction(XKEY_STR(XK_D), "Move view down");
+
 		
 #define ELSE_TOGGLE_KEY(K,B) else if(K->match(evt)) { this->B=!(this->B); repaint();}
 
@@ -970,28 +990,38 @@ int X11Browser::doWork(int argc,char** argv) {
 		    done = true;
 		    }
 		else if(actionPrevBam->match(evt)) {
-		    bam_index = (bam_index==0UL?bams.size()-1:bam_index-1);
+		   this-> bam_index = (this->bam_index==0UL?this->bams.size()-1:this->bam_index-1);
+                    this->top_row_index=0UL;
 		    repaint();
 		    }
 		else if(actionNextBam->match(evt)) {
-		    bam_index = (bam_index+1>=bams.size()?0:bam_index+1);
+		    this->bam_index = (this->bam_index+1>=this->bams.size()?0:this->bam_index+1);
+                    this->top_row_index=0UL;
 		    repaint();
 		    }
 		else if(actionPrevInterval->match(evt)) {
 		    interval_idx = (interval_idx==0UL?intervals.size()-1:interval_idx-1);
 		    this->interval->assign(this->intervals.at(interval_idx));
+                    this->top_row_index=0UL;
 		    repaint();
 		    }
 		else if(actionNextInterval->match(evt)) {
 		    interval_idx = (interval_idx+1>=intervals.size()?0:interval_idx+1);
 		    this->interval->assign(this->intervals.at(interval_idx));
+                    this->top_row_index=0UL;
 		    repaint();
+		    }
+		else if(actionResetInterval->match(evt)) {
+		    this->interval->assign(this->intervals.at(interval_idx));
+		    this->top_row_index=0UL;
+		    repaint();	
 		    }
 		else if(actionZoomIn->match(evt)) {
 		    doZoom(0.66);
 		    repaint();
 		    }
 		else if(actionZoomOut->match(evt)) {
+		    this->top_row_index=0UL;
 		    doZoom(1.3);
 		    repaint();
 		    }
@@ -1012,7 +1042,19 @@ int X11Browser::doWork(int argc,char** argv) {
 			}
 		    repaint();
 		    }
-		ELSE_TOGGLE_KEY(actionGroupByPair,group_by_pair)
+		else if(actionBamRowUp->match(evt)) {
+			if(this->top_row_index>0) this->top_row_index--;
+			paint();
+			}
+		else if(actionBamRowDown->match(evt)) {
+			this->top_row_index++;
+			paint();
+			}
+		else if(actionGroupByPair->match(evt)) {
+			this->top_row_index=0UL;
+			this->group_by_pair = !this->group_by_pair;
+			repaint();
+			}
 		ELSE_TOGGLE_KEY(actionShowClip,show_clip)
 		ELSE_TOGGLE_KEY(actionHideSupplementaryReads,hide_supplementary_reads)
 		ELSE_TOGGLE_KEY(actionHideDuplicateReads,hide_duplicate_reads)

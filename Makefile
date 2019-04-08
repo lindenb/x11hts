@@ -79,6 +79,12 @@ version.hh :
 	echo '"' >> $@
 	echo "#endif" >> $@
 
+test3: x11hts
+	echo "3	38674526	38687267" > jeter.bed
+	echo "/home/lindenb/CD07595.bam" > jeter.bam.list
+	./x11hts browse -B jeter.bam.list  -r jeter.bed -R /home/lindenb/data/human_g1k_v37.fasta
+
+
 test2: x11hts
 	find ${HOME}/src/jvarkit-git/src/test/resources/ -name "S*.bam" |sort> jeter.bam.list
 	echo "RF03	1	10	POUM" > jeter.bed
