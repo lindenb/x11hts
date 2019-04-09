@@ -63,6 +63,29 @@ GzipInputStreamBuf::GzipInputStreamBuf(int fd):buffer_size(BUFFER_SIZE),buffer(0
 	init_buffer(BUFFER_SIZE);
 	}
 
+
+GzipInputStreamBuf::GzipInputStreamBuf(const char* fname,std::size_t buflen):buffer_size(0UL),buffer(0),gzin(0)
+	{
+	ASSERT_NOT_NULL(fname);
+	this->gzin = ::gzopen(fname,"r");
+	if(this->gzin == Z_NULL)
+	    {
+	    FATAL("Cannot open file: " << fname <<  " "<< strerror(errno));
+	    }
+	init_buffer(buflen);
+	}
+
+GzipInputStreamBuf::GzipInputStreamBuf(int fd,std::size_t buflen):buffer_size(BUFFER_SIZE),buffer(0),gzin(0)
+	{
+	this->gzin = ::gzdopen(fd, "r");
+	if(this->gzin == Z_NULL)
+	    {
+	    FATAL("Cannot open file descriptor: " << fd <<  " "<< strerror(errno));
+	    }
+	init_buffer(buflen);
+	}
+
+
 GzipInputStreamBuf::~GzipInputStreamBuf()
 	{
 	if(this->gzin!=Z_NULL) ::gzclose(this->gzin);

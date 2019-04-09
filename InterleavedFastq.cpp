@@ -33,11 +33,12 @@ THE SOFTWARE.
 #include <cassert>
 #include "macros.hh"
 #include "AbstractCmdLine.hh"
-#include "KString.hh"
+#include "GZipInputStreamBuf.hh"
 #include "Utils.hh"
 
 using namespace std;
 
+#define DEFAULT_BUFFER_SIZE 5000000
 
 class InterleavedFastq:public AbstractCmd
     {
@@ -56,31 +57,39 @@ InterleavedFastq::InterleavedFastq() {
     opt = new Option('d',true,"divider");
     opt->arg("integer")->required();
     options.push_back(opt);
+
+    opt = new Option('B',true,"buffer size [5000000]");
+    opt->arg("integer")->required();
+    options.push_back(opt);
     }
 
 InterleavedFastq::~InterleavedFastq() {
 
 }
 #define MUST_READ(IN,L) \
-	if(!KString::readLine(IN, L)) FATAL("line missing in fastq " << L1 << ".")
+	if(!getline(IN, L,'\n')) FATAL("line missing in fastq " << L1 << ".")
 
-#define WRITE_LINE(L) L.write(stdout);fputc('\n',stdout)
+#define WRITE_LINE(L) cout.write(L.data(),L.size());cout.put('\n')
 
 int InterleavedFastq::doWork(int argc,char** argv) {
     int opt;
-    int modulo=-1;
-    int divider =0;
+    long modulo=-1;
+    long divider =0;
+    size_t buffer_size= DEFAULT_BUFFER_SIZE;
+
     string optstr = this->build_getopt_str();
     while ((opt = ::getopt(argc, argv, optstr.c_str())) != -1) {
 	    switch (opt) {
-	    case 'h':
-		    usage(cout);
-		    return 0;
+	    case 'h': usage(cout); return 0;
+	    case 'v': cout << app_version << endl; return 0;
 	    case 'm':
-		    modulo = Utils::parseInt(optarg);
+		    modulo = (long)Utils::parseInt(optarg);
 		    break;
 		case 'd':
-		    divider = Utils::parseInt(optarg);
+		    divider = (long)Utils::parseInt(optarg);
+		    break;
+		case 'B':
+		    buffer_size = (size_t)Utils::parseInt(optarg);
 		    break;
 	    case '?':
 		    cerr << "unknown option -"<< (char)optopt << endl;
@@ -102,22 +111,24 @@ int InterleavedFastq::doWork(int argc,char** argv) {
 	    cerr << "Bad arguments : modulo>=divider" << endl;
 	    return EXIT_FAILURE;
 	    }
-    KString L1;
-    KString L2;
-    KString L3;
-    KString L4;
-
-
+    string L1;
+    string L2;
+    string L3;
+    string L4;
+    ios::sync_with_stdio(false);
+    char* outbuf=new char[buffer_size];
+    std::cout.rdbuf()->pubsetbuf(outbuf, buffer_size);
     long nReads  = 0;
     if(optind==argc || optind+1==argc) {
 	    //single end
-	    gzFile in=
+	    GzipInputStreamBuf* buf =
 		    (optind==argc?
-		      ::gzdopen(fileno(stdin),"r"):
-		      ::gzopen(argv[optind],"r")
+		     new GzipInputStreamBuf(fileno(stdin),buffer_size):
+		     new GzipInputStreamBuf(argv[optind],buffer_size)
 		     );
+            std::istream in(buf);
 	    for(;;) {
-		if(!KString::readLine(in, L1)) break;
+		if(!getline(in,L1,'\n')) break;
 		MUST_READ(in,L2);
 		MUST_READ(in,L3);
 		MUST_READ(in,L4);
@@ -130,21 +141,23 @@ int InterleavedFastq::doWork(int argc,char** argv) {
 		    }
 		nReads++;
 		}
-	   gzclose(in);
 	   cout.flush();
+	   delete buf;
 	  }
 	else if(optind+2==argc) {
 	    //paired end
-	    gzFile in1 = ::gzopen(argv[optind  ],"r");
-	    gzFile in2 = ::gzopen(argv[optind+1],"r");
-	    KString L5;
-	    KString L6;
-	    KString L7;
-	    KString L8;
+	   GzipInputStreamBuf* buf1 =  new GzipInputStreamBuf(argv[optind  ],buffer_size);
+	   GzipInputStreamBuf* buf2 =  new GzipInputStreamBuf(argv[optind+1],buffer_size);	    
+		istream in1(buf1);
+		istream in2(buf2);
+	    string L5;
+	    string L6;
+	    string L7;
+	    string L8;
 
 	    for(;;) {
-		if(!KString::readLine(in1, L1)) {
-		    if(KString::readLine(in2, L5)) {
+		if(!getline(in1, L1,'\n')) {
+		    if(getline(in2, L5,'\n')) {
 			FATAL("extra read in "<< argv[optind+1]);
 		        }
 		    break;
@@ -168,15 +181,15 @@ int InterleavedFastq::doWork(int argc,char** argv) {
 		    }
 	     nReads++;
 	     }
-	    gzclose(in1);
-	    gzclose(in2);
+	   delete buf1;
+	   delete buf2;
 	    cout.flush();
 	  }
     else {
     	cerr << "Illegal Number of arguments." << endl;
     	return EXIT_FAILURE;
     	}
-
+    delete[] outbuf;
     return EXIT_SUCCESS;
     }
   	 	

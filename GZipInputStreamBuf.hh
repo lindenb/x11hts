@@ -48,7 +48,10 @@ class GzipInputStreamBuf : public std::basic_streambuf<char>
 	public:
 		GzipInputStreamBuf(const char* fname);
 		GzipInputStreamBuf(int);
+		GzipInputStreamBuf(const char* fname,std::size_t buf_size);
+		GzipInputStreamBuf(int,std::size_t buf_size);
 		virtual ~GzipInputStreamBuf();
+        protected:
 		virtual int underflow( );
 	};
 
