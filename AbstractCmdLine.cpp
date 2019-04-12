@@ -55,6 +55,11 @@ Option* Option::required() {
     }
 
 
+const int AbstractCmd::OPT_EXIT_FAILURE = -1;
+const int AbstractCmd::OPT_EXIT_SUCCESS = -2;
+const int AbstractCmd::OPT_CONTINUE = 0;
+
+
 AbstractCmd::AbstractCmd():app_name("application"),app_version(X11HTS_VERSION) {
 	options.push_back(new Option('h',false,"print help"));
 	options.push_back(new Option('v',false,"print version"));
@@ -63,6 +68,25 @@ AbstractCmd::~AbstractCmd()
 	{
 	for(auto opt:options) delete opt;
 	}
+
+int AbstractCmd::handle_option(int optopt) {
+    switch(optopt)
+	{
+	case 'h':
+		usage(cout);
+		return  AbstractCmd::OPT_EXIT_SUCCESS;
+	case 'v':
+		cout << this->app_version << endl;
+		return  AbstractCmd::OPT_EXIT_SUCCESS;
+	case '?':
+		cerr << "unknown option -"<< (char)optopt << endl;
+		return AbstractCmd::OPT_EXIT_FAILURE;
+	default: /* '?' */
+		cerr << "unknown option" << endl;
+		return AbstractCmd::OPT_EXIT_FAILURE;
+	}
+    }
+
 
 
 void AbstractCmd::usage_options(std::ostream& out) {

@@ -80,23 +80,16 @@ int InterleavedFastq::doWork(int argc,char** argv) {
     string optstr = this->build_getopt_str();
     while ((opt = ::getopt(argc, argv, optstr.c_str())) != -1) {
 	    switch (opt) {
-	    case 'h': usage(cout); return 0;
-	    case 'v': cout << app_version << endl; return 0;
 	    case 'm':
-		    modulo = (long)Utils::parseInt(optarg);
-		    break;
-		case 'd':
-		    divider = (long)Utils::parseInt(optarg);
-		    break;
-		case 'B':
-		    buffer_size = (size_t)Utils::parseInt(optarg);
-		    break;
-	    case '?':
-		    cerr << "unknown option -"<< (char)optopt << endl;
-		    return EXIT_FAILURE;
-	    default: /* '?' */
-		    cerr << "unknown option" << endl;
-		    return EXIT_FAILURE;
+		modulo = (long)Utils::parseInt(optarg);
+		break;
+	    case 'd':
+		divider = (long)Utils::parseInt(optarg);
+		break;
+	    case 'B':
+		buffer_size = (size_t)Utils::parseInt(optarg);
+		break;
+	    default: DEFAULT_HANDLE_OPTION (opt);break;
 	    }
 	}
     if(modulo<0)  {

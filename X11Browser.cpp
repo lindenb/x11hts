@@ -43,6 +43,7 @@ THE SOFTWARE.
 #include "Utils.hh"
 #include "Faidx.hh"
 #include "Locatable.hh"
+#include "Interval.hh"
 
 #include "macros.hh"
 
@@ -177,21 +178,9 @@ X11Browser::X11Browser():interval(0),
     app_desc="X11 based bam viewer";
     app_name="browse";
 
-    Option* opt= new Option('B',true,"A file containing the path to the indexed bam files. One per line");
-    opt->required();
-    opt->arg("file");
-    options.push_back(opt);
 
-    opt= new Option('r',true,"A bed file containing the regions to observe");
-    opt->required();
-    opt->arg("file.bed");
-    options.push_back(opt);
 
-    opt= new Option('R',true,"Indexed fasta file");
-    opt->arg("ref.fasta");
-    options.push_back(opt);
-
-    opt= new Option('D',true,"Export directory; Where to save screenshots.");
+    Option* opt= new Option('D',true,"Export directory; Where to save screenshots.");
     opt->arg("directory");
     options.push_back(opt);
 
@@ -879,9 +868,6 @@ int X11Browser::doWork(int argc,char** argv) {
 
 
 	char* export_dir = NULL;
-	char* bam_list = NULL;
-	char* region_list = NULL;
-	char* reference_fasta_file = NULL;
 	int opt;
 
 	if(argc<=1) {
@@ -891,93 +877,79 @@ int X11Browser::doWork(int argc,char** argv) {
 	std::string opt_str=  this->build_getopt_str();
 	while ((opt = getopt(argc, argv, opt_str.c_str())) != -1) {
 		switch (opt) {
-		case 'h':
-			usage(cout);
-			return 0;
-		case 'v':
-			cout << app_version << endl;
-			return 0;
-		case 'B':
-			bam_list = optarg;
-			break;
-		case 'r':
-			region_list = optarg;
-			break;
-		case 'R':
-			reference_fasta_file = optarg;
-			break;
 		case 'D':
 		    export_dir = optarg;
 		    break;
-		case '?':
-			cerr << "unknown option -"<< (char)optopt << endl;
-			return EXIT_FAILURE;
-		default: /* '?' */
-			cerr << "unknown option" << endl;
-			return EXIT_FAILURE;
+		default: DEFAULT_HANDLE_OPTION(optopt);break;
 		}
 	}
-	if(optind!=argc) FATAL("Illegal number of arguments.");
 
-	/** FASTA REF */
-	if(reference_fasta_file!=NULL)
-	    {
-	    this->indexedFastaSequence = new IndexedFastaSequence(reference_fasta_file);
-	    }
-
-	/* BEGIN OPEN BAM FILES ---------------------------------------- */
-	if(bam_list == NULL)
-	    {
-	    FATAL("List of bams is undefined.");
-	    }
-	else
-	    {
-	    ifstream bamin(bam_list);
-	    if(!bamin.is_open()) FATAL("Cannot open " << bam_list << " "<< strerror(errno));
-	    string line;
-	    SAMFileFactory samFileFactory;
-	    while(getline(bamin,line)) {
-		    if(Utils::isBlank(line) || line[0]=='#') continue;
-		    SAMFile* bamFile = samFileFactory.open(line.c_str());
-		    this->bams.push_back(bamFile);
+	SAMFileFactory samFileFactory;
+	while(optind<argc) {
+	    char* fname=argv[optind++];
+	    if(Utils::endsWith(fname, ".fa") || Utils::endsWith(fname, ".fasta")) {
+		if(this->indexedFastaSequence!=NULL) FATAL("Reference defined twice");
+		this->indexedFastaSequence = new IndexedFastaSequence(fname);
+		}
+	    else if(Utils::endsWith(fname, ".bam")) {
+		SAMFile* bamFile = samFileFactory.open(fname);
+		this->bams.push_back(bamFile);
+		}
+	    else if(Utils::endsWith(fname, ".list")) {
+		ifstream bamin(fname);
+		if(!bamin.is_open()) FATAL("Cannot open " << fname << " "<< strerror(errno));
+		string line;
+		while(getline(bamin,line)) {
+			if(Utils::isBlank(line) || line[0]=='#') continue;
+			SAMFile* bamFile = samFileFactory.open(line.c_str());
+			this->bams.push_back(bamFile);
+			}
+		bamin.close();
+		}
+	    else if(Utils::endsWith(fname, ".bed")) {
+		string line;
+		BedCodec bedCodec;
+		ifstream bedin(fname);
+		std::vector<string> tokens;
+		if(!bedin.is_open()) FATAL("Cannot open BED " << fname << " "<< strerror(errno));
+		while(getline(bedin,line)) {
+		    if(bedCodec.is_ignore(line)) continue;
+		    BrowserInterval* interval = new BrowserInterval;
+		    Utils::split('\t',line,tokens);
+		    if(!bedCodec.parse(tokens,&interval->contig,&interval->start,&interval->end)) {
+			delete interval;
+			FATAL("Cannot parse " << line);
+			}
+		    interval->start++;
+		    if(interval->start > interval->end) {
+			WARN("Ignore " << line);
+			delete interval;
+			continue;
+			}
+		    intervals.push_back(interval);
 		    }
-	    bamin.close();
-	    if(this->bams.empty()) FATAL("List of bams is empty.");
-	    }
-	/* END OPEN BAM FILES ---------------------------------------- */
-
-	/* BEGIN OPEN BED FILES ---------------------------------------- */
-	if(region_list == NULL) {
-	    FATAL("List of regions is undefined.");
-	    }
-	else
-	    {
-	    string line;
-	    BedCodec bedCodec;
-	    ifstream bedin(region_list);
-	    std::vector<string> tokens;
-	    if(!bedin.is_open()) FATAL("Cannot open " << region_list << " "<< strerror(errno));
-	    while(getline(bedin,line)) {
-	  	if(bedCodec.is_ignore(line)) continue;
-	  	BrowserInterval* interval = new BrowserInterval;
-	  	Utils::split('\t',line,tokens);
-		if(!bedCodec.parse(tokens,&interval->contig,&interval->start,&interval->end)) {
-		    delete interval;
-		    FATAL("Cannot parse " << line);
-		    }
-		interval->start++;
+		bedin.close();
+		}
+	    else // consider interval
+		{
+		std::shared_ptr<Interval> rgn =  Interval::parse(fname);
+		if(!rgn) FATAL("Cannot parse interval "<< fname);
+		BrowserInterval* interval = new BrowserInterval;
+		interval->contig.assign(rgn->getContig());
+		interval->start = rgn->getStart();
+		interval->end = rgn->getEnd();
 		if(interval->start > interval->end) {
-		    WARN("Ignore " << line);
+		    WARN("Ignore " << fname);
 		    delete interval;
 		    continue;
 		    }
 		intervals.push_back(interval);
 		}
-	    bedin.close();
-	    if(this->intervals.empty())  FATAL("List of regions is empty.");
-	    this->interval->assign(this->intervals[0]);
 	    }
-	/* END OPEN BED FILES ---------------------------------------- */
+
+	if(this->bams.empty()) FATAL("List of bams is empty.");
+	if(this->intervals.empty())  FATAL("List of regions is empty.");
+	this->interval->assign(this->intervals[0]);
 
 	//
 	this->createWindow();

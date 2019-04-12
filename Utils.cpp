@@ -205,3 +205,13 @@ std::string Utils::substring_after(const std::string& line,const char* delim) {
     if(t==string::npos) return "";
     return line.substr(t+1);
     }
+
+std::FILE* Utils::safeFOpen(const char* fname,const char* mode) {
+    ASSERT_NOT_NULL(fname);
+    ASSERT_NOT_NULL(mode);
+    std::FILE* in=::fopen(fname,mode);
+    if(in==NULL) {
+	FATAL("Cannot open \"" << fname << "\". " << strerror(errno));
+	}
+    return in;
+    }

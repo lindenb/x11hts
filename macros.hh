@@ -10,6 +10,7 @@
 
 #define FATAL(a) do {std::cerr <<"[FATAL][" << __FILE__<<":" << __LINE__ << "]" << a << std::endl;std::exit(EXIT_FAILURE);} while(0)
 #define WARN(a) do {std::cerr <<"[WARN][" << __FILE__<<":" << __LINE__ << "]" << a << std::endl;} while(0)
+#define DEBUG(a) do {std::cerr <<"[DEBUG][" << __FILE__<<":" << __LINE__ << "]" << a << std::endl;} while(0)
 
 #endif
 

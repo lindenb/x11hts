@@ -38,10 +38,13 @@ class X11Hts : public AbstractCmd
 	virtual int doWork(int argc,char** argv);
     };
 
-extern int main_cnv(int argc,char** argv);
-extern int main_browser(int argc,char** argv);
-extern int main_splitfastq(int argc,char** argv);
-extern int main_interleavedfastq(int argc,char** argv);
+#define EXTERN_MAIN(f)  extern int f(int argc,char** argv)
+
+EXTERN_MAIN(main_cnv);
+EXTERN_MAIN(main_browser);
+EXTERN_MAIN(main_splitfastq);
+EXTERN_MAIN(main_interleavedfastq);
+EXTERN_MAIN(main_find_nnn_in_fasta);
 
 X11Hts::X11Hts() {
     app_name="x11hts";
@@ -57,6 +60,7 @@ out << "    "<< app_name << " cnv [options]" << endl;
 out << "    "<< app_name << " browse [options]" << endl;
 out << "    "<< app_name << " splitfastq [options]" << endl;
 out << "    "<< app_name << " interleavedfastq [options]" << endl;
+out << "    "<< app_name << " findnnninfasta [options]" << endl;
 
 out << endl;
 }
@@ -73,6 +77,7 @@ int X11Hts::doWork(int argc,char** argv) {
 		else if(strcmp(argv[1],"browse")==0) { return main_browser(argc-1,&argv[1]);}
 		else if(strcmp(argv[1],"splitfastq")==0) { return main_splitfastq(argc-1,&argv[1]);}
 		else if(strcmp(argv[1],"interleavedfastq")==0) { return main_interleavedfastq(argc-1,&argv[1]);}
+		else if(strcmp(argv[1],"findnnninfasta")==0) { return main_find_nnn_in_fasta(argc-1,&argv[1]);}
 		else
 			{
 			cerr << "unknown command \""<< argv[1] << "\"." << endl;

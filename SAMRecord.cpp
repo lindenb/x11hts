@@ -351,7 +351,7 @@ int SAMRecord::getAlignmentEnd() {
             return NO_ALIGNMENT_START;
             }
        else if (this->mAlignmentEnd == NO_ALIGNMENT_START) {
-	    this->mAlignmentEnd = getAlignmentStart() + getCigar()->getReferenceLength() - 1;
+	    this->mAlignmentEnd = ::bam_endpos(b)+1;
 	    }
         return this->mAlignmentEnd;
 	}

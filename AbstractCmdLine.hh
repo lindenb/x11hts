@@ -47,6 +47,10 @@ class Option
 
 class AbstractCmd
 	{
+        protected:
+	    static const int OPT_EXIT_FAILURE;
+	    static const int OPT_EXIT_SUCCESS;
+	    static const int OPT_CONTINUE;
 	public:
 		std::string app_name;
 		std::string app_version;
@@ -56,11 +60,19 @@ class AbstractCmd
 		std::string build_getopt_str();
 		AbstractCmd();
 		virtual ~AbstractCmd();
+		virtual int handle_option(int optc);
 		virtual void usage_options(std::ostream& out);
 		virtual void usage(std::ostream& out);
 		virtual int doWork(int argc,char** argv);
 		virtual Option* find_opt_by_opt(int c);
 	};
+
+#define DEFAULT_HANDLE_OPTION(opt) do { int __choice = this->handle_option(opt);\
+	if(__choice  == AbstractCmd::OPT_EXIT_SUCCESS ) return EXIT_SUCCESS;\
+        else if(__choice  == AbstractCmd::OPT_EXIT_FAILURE ) return EXIT_FAILURE;\
+        else break;\
+	} while(0)
+
 
 #endif
 

@@ -6,8 +6,9 @@ INCLUDES=-I$(HTSLIB)
 CFLAGS=-Wall -std=c++11 -g
 CC=g++
 
+
 OBJS=X11Hts X11BamCov X11Launcher SAMRecord SAMFile AbstractCmdLine Utils SplitFastq GZipInputStreamBuf \
-	InterleavedFastq X11Browser Graphics BedLine Faidx Locatable Interval Hershey KString
+	InterleavedFastq X11Browser Graphics BedLine Faidx Locatable Interval Hershey KString FindNNNInFasta
 
 ifeq ($(realpath $(HTSLIB)/htslib/sam.h),)
 $(error cannot find $(HTSLIB)/htslib/sam.h. Please define HTSLIB when invoking make. Something like `make HTSLIB=../htslib`)
@@ -82,7 +83,7 @@ version.hh :
 test3: x11hts
 	echo "3	38674526	38687267" > jeter.bed
 	echo "/home/lindenb/CD07595.bam" > jeter.bam.list
-	./x11hts browse -B jeter.bam.list  -r jeter.bed -R /home/lindenb/data/human_g1k_v37.fasta
+	./x11hts browse  jeter.bam.list   jeter.bed  /home/lindenb/data/human_g1k_v37.fasta
 
 
 test2: x11hts

@@ -59,6 +59,7 @@ class Utils {
 	static std::string substring_before(const std::string& line,const char* delim);
 	static std::string substring_after(const std::string& line,const char* delim);
 
+	static std::FILE* safeFOpen(const char* fname,const char* mode);
 
 };
 
