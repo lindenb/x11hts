@@ -24,7 +24,7 @@ THE SOFTWARE.
 */
 #ifndef X11LAUNCHER_HH
 #define X11LAUNCHER_HH
-
+#ifndef WITHOUT_X11
 #include <map>
 #include <functional>
 #include <X11/Xlib.h>
@@ -72,5 +72,5 @@ class X11Launcher:public AbstractCmd
 		std::vector<KeyAction*> all_key_actions;
 		virtual Pixmap getOffscreen();
 	};
-
+#endif
 #endif

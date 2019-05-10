@@ -69,9 +69,9 @@ SAMFile* SAMFileFactory::open(const char* fn) {
 	ASSERT_NOT_NULL(instance->filename);
 	instance->fp = ::hts_open(fn, "r");
 	if(instance->fp==NULL) {
-			delete instance;
-			FATAL( "Cannot open " << fn << ". " << ::strerror(errno));
-			}
+		delete instance;
+		FATAL( "Cannot open " << fn << ". " << ::strerror(errno));
+		}
 	instance->hdr = ::sam_hdr_read(instance->fp);
 	if (instance->hdr == NULL) {
 		delete instance;

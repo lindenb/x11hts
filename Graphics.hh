@@ -2,9 +2,12 @@
 #define GRAPHICS_HH
 #include <fstream>
 #include <iostream>
-#include <X11/Xlib.h>
-#include <X11/keysym.h>
-#include <X11/Xutil.h>
+
+#ifndef WITHOUT_X11
+ #include <X11/Xlib.h>
+ #include <X11/keysym.h>
+ #include <X11/Xutil.h>
+#endif
 
 class Graphics
 	{
@@ -25,7 +28,7 @@ class Graphics
 
 	};
 
-
+#ifndef WITHOUT_X11
 class X11Graphics :public Graphics
 	{
 	private:
@@ -44,6 +47,7 @@ class X11Graphics :public Graphics
 		virtual void fillRect(double x,double y,double width,double height);
 		virtual void fillPolygon(size_t n,double* x,double* y);
 	};
+#endif
 
 class PSGraphics :public Graphics
 	{

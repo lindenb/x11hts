@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 */
+#ifndef WITHOUT_X11
 #include <memory>
 #include <map>
 #include <sstream>
@@ -1119,3 +1120,16 @@ int main_browser(int argc,char** argv) {
     X11Browser app;
     return app.doWork(argc,argv);
     }
+
+#else
+#include <iostream>
+#include <cstdlib>
+
+using namespace std;
+
+int main_browser(int argc,char** argv) {
+    cerr << argv[0] << ": X11 is not available." << endl;
+    return EXIT_FAILURE;
+    }
+
+#endif

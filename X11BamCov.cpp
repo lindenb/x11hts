@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 */
+#ifndef WITHOUT_X11
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <X11/Xutil.h>
@@ -74,15 +75,13 @@ typedef short pixel_t;
 class ChromStartEnd : public Interval
 	{
 	public:
-	/** remaining element in the bed file , 4th column */
-	std::string label;
-	/** constructor: accept bed or interval */
-	ChromStartEnd(const char* chrom,int start,int end):Interval(chrom,start,end) {
-
+	    /** remaining element in the bed file , 4th column */
+	    std::string label;
+	    /** constructor: accept bed or interval */
+	    ChromStartEnd(const char* chrom,int start,int end):Interval(chrom,start,end) {
 		}
-	virtual ~ChromStartEnd() {
-	    }
-
+	    virtual ~ChromStartEnd() {
+		}
 	};
 
 
@@ -94,13 +93,13 @@ class X11BamCov: public X11Launcher
     public:
 	    std::vector<BamW*> bams;
 	    std::vector<ChromStartEnd*> regions;
-	    ChromStartEnd* interval;
+	    int smooth_factor;
 	    size_t region_idx;
 	    float extend_factor;
+	    ChromStartEnd* interval;
 	    int num_columns;
 	    int cap_depth;
 	    bool show_sample_name;
-	    int smooth_factor;
 	    X11BamCov();
 	    virtual ~X11BamCov();
 	    virtual int doWork(int argc,char** argv);
@@ -122,11 +121,11 @@ public:
 class BamW : public SAMFile
 	{
 	public:
-		X11BamCov* owner;
+		double max_depth;
 		std::string sample;
 		std::vector<float> coverage;
 		bool bad_flag;
-		double max_depth;
+		X11BamCov* owner;
 		XRectangle bounds;
 		
 		BamW(X11BamCov* owner);
@@ -151,7 +150,7 @@ BamW::~BamW() {
 	}
 
 
-X11BamCov::X11BamCov():show_sample_name(true),
+X11BamCov::X11BamCov():
 	smooth_factor(20),
 	interval(0)
 	{
@@ -261,7 +260,8 @@ for(auto bam: this->bams) {
    		array_x[2+i] = (bam->bounds.x+i);
    		array_y[2+i] = (bam->bounds.y+bam->bounds.height - h);
    		}
-  ChromStartEnd* original = this->interval[this->region_idx];
+
+   ChromStartEnd* original = this->interval;
 
   if(rgn->getStart()!=original->getStart() || rgn->getEnd()!= original->getEnd()) {
   	pixel_t x1 = (pixel_t)(bam->bounds.x + ((original->getStart()-rgn->getStart())/(double)rgn->getLengthOnReference())*bam->bounds.width);
@@ -613,9 +613,9 @@ int X11BamCov::doWork(int argc,char** argv) {
 
 
 	if(this->regions.empty()) {
-		cerr << "[FAILURE] List of regions is empty." << endl;
-		return EXIT_FAILURE;
-		}
+	    cerr << "[FAILURE] List of regions is empty." << endl;
+	    return EXIT_FAILURE;
+	    }
 	else
 	    {
 	    this->interval  = new ChromStartEnd(*(this->regions[0]));
@@ -634,13 +634,15 @@ int X11BamCov::doWork(int argc,char** argv) {
 		else if (actionPrevInterval->match(evt))
 			{
 			region_idx = (region_idx==0UL?regions.size()-1:region_idx-1);
-			this->interval->assign(this->regions[interval]);
+			if(this->interval!=0) delete this->interval;
+			this->interval = new ChromStartEnd(*(this->regions[region_idx]));
 			repaint();
 			}
 		else if (actionNextInterval->match(evt))
 			{
 			region_idx = (region_idx+1>=regions.size()?0:region_idx+1);
-			this->interval->assign(this->regions[interval]);
+			if(this->interval!=0) delete this->interval;
+			this->interval = new ChromStartEnd(*(this->regions[region_idx]));
 			repaint();
 			}
 		else if(actionExportPS->match(evt) || actionExportSVG->match(evt))
@@ -658,7 +660,7 @@ int X11BamCov::doWork(int argc,char** argv) {
 			    std::string title =os.str();
 
 			    ostringstream os2;
-			    os2 << this->interval->getContig<<"_" << this->interval->getStart() << "_" << this->interval->getEnd() ;
+			    os2 << this->interval->getContig() <<"_" << this->interval->getStart() << "_" << this->interval->getEnd() ;
 			    std::string title2 =os2.str();
 
 			    unique_ptr<Graphics> g(actionExportPS->match(evt)?
@@ -670,17 +672,17 @@ int X11BamCov::doWork(int argc,char** argv) {
 			}
 		else if (actionLessColumn->match(evt) && num_columns>1)
 			{
-			num_columns--;
+			this->num_columns--;
 			repaint();
 			}
 		else if (actionMoreColumn->match(evt) && num_columns+1<= (int)this->bams.size())
 			{
-			num_columns++;
+			this->num_columns++;
 			repaint();
 			}
 		else if (actionShowName->match(evt))
 			{
-			show_sample_name = !show_sample_name;
+			this->show_sample_name = !this->show_sample_name;
 			repaint();
 			}
 		else if(evt.type ==   Expose)
@@ -696,3 +698,14 @@ int main_cnv(int argc,char** argv) {
 	X11BamCov app;
 	return app.doWork(argc,argv);
 	}
+#else
+
+#include <iostream>
+#include <cstdlib>
+int main_cnv(int argc,char** argv) {
+	std::cerr << argv[0] << " not available (no X11)\n";
+	return EXIT_FAILURE;
+	}
+
+#endif
+

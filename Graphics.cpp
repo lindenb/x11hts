@@ -124,7 +124,7 @@ void Graphics::drawPolygon(size_t n,double* x,double* y)
     drawLine(x[n-1], y[n-1], x[0], y[0]);
     }
 
-
+#ifndef WITHOUT_X11
 
 X11Graphics::X11Graphics(Display* display,Drawable drawable):
 	display(display),
@@ -183,6 +183,9 @@ void X11Graphics::fillPolygon(size_t n,double* x,double* y)
     ::XFillPolygon(this->display,this->drawable, gc, pt, (int)n, Complex,CoordModeOrigin);
     delete[] pt;
     }
+
+#endif
+
 
 /* ================================================================================== */
 
